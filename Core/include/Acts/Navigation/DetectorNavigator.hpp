@@ -114,6 +114,10 @@ class DetectorNavigator {
 
   bool targetReached(const State& state) const { return state.targetReached; }
 
+  // The Propagator will check the AbortList and call this
+  // before the PreStep. Thus, only initialize() will be called
+  // and state.currentVolume will be nullptr. Thus, no propagation
+  // will be performed.
   bool endOfWorldReached(State& state) const {
     return state.currentVolume == nullptr;
   }

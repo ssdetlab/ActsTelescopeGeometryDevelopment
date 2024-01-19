@@ -215,4 +215,72 @@ BOOST_AUTO_TEST_CASE(SurfaceMaterialMapperTrackingGeometrRemappingWithVeto) {
               mTrack.second.materialInteractions.size() - negativeSide);
 }
 
+BOOST_AUTO_TEST_CASE(SurfaceMaterialMapperDetector) {
+  double rotationAngle = 90_degree;
+  Acts::Vector3 xPos(cos(rotationAngle), 0., sin(rotationAngle));
+  Acts::Vector3 yPos(0., 1., 0.);
+  Acts::Vector3 zPos(-sin(rotationAngle), 0., cos(rotationAngle));
+  Acts::RotationMatrix3 rotation;
+  rotation.col(0) = xPos;
+  rotation.col(1) = yPos;
+  rotation.col(2) = zPos;
+
+  // Boundaries of the surfaces
+  auto rBounds =
+      std::make_shared<const Acts::RectangleBounds>(Acts::RectangleBounds(0.5_m, 0.5_m));
+
+  // Material of the surfaces
+  Acts::MaterialSlab matProp(Acts::Test::makeBeryllium(), 0.5_mm);
+  auto surfaceMaterial = std::make_shared<Acts::HomogeneousSurfaceMaterial>(matProp);
+
+  auto cube = Acts::Test::CubicTrackingGeometry(tContext);
+  auto tGeometry = cube();
+
+  Acts::Navigator navigator({tGeometry});
+  Acts::StraightLineStepper stepper;
+  Acts::SurfaceMaterialMapper::StraightLinePropagator propagator(
+      stepper, std::move(navigator),
+      Acts::getDefaultLogger("StraightLinePropagator", Acts::Logging::VERBOSE));
+
+  Acts::SurfaceMaterialMapper::Config smmConfig;
+  Acts::SurfaceMaterialMapper smMapper(
+      smmConfig, std::move(propagator),
+      Acts::getDefaultLogger("SurfaceMaterialMapper", Acts::Logging::VERBOSE));
+
+  auto state = smMapper.createState(tContext, tContext, *tGeometry);
+
+  Acts::SurfaceMaterialMapper::State* surfaceState =
+      static_cast<Acts::SurfaceMaterialMapper::State*>(state.get());
+
+  BOOST_CHECK(surfaceState != nullptr);
+  BOOST_CHECK(surfaceState->accumulatedMaterial.size() == 6u);
+
+  // Run the mapping
+  auto mTrack = createRecordedMaterialTrack(materialSteps);
+  auto [mapped, unmapped] = smMapper.mapMaterialTrack(*surfaceState, mTrack);
+  // Check that all material is mapped
+  BOOST_CHECK(mapped.second.materialInteractions.size() ==
+              mTrack.second.materialInteractions.size());
+  BOOST_CHECK(unmapped.second.materialInteractions.size() == 0u);
+  // Check that the material is collected
+  CHECK_CLOSE_ABS(mapped.second.materialInX0,
+                  mTrack.second.materialInteractions.size(), 1e-10);
+  CHECK_CLOSE_ABS(mapped.second.materialInL0,
+                  mTrack.second.materialInteractions.size(), 1e-10);
+
+  // Create a new cache and run the mapping again - this time intersections are
+  // not necessary
+  auto restate = smMapper.createState(tContext, tContext, *tGeometry);
+  auto [remapped, reunmapped] = smMapper.mapMaterialTrack(*restate, mapped);
+
+  BOOST_CHECK(mapped.second.materialInteractions.size() ==
+              remapped.second.materialInteractions.size());
+  CHECK_CLOSE_ABS(mapped.second.materialInX0, remapped.second.materialInX0,
+                  1e-10);
+  CHECK_CLOSE_ABS(mapped.second.materialInL0, remapped.second.materialInL0,
+                  1e-10);
+  BOOST_CHECK(unmapped.second.materialInteractions.size() ==
+              reunmapped.second.materialInteractions.size());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
