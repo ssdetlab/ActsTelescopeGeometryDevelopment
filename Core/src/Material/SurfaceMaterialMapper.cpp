@@ -149,6 +149,7 @@ void Acts::SurfaceMaterialMapper::resolveMaterialSurfaces(
   for (const auto* portal : dVolume.portals()) {
     checkAndInsert(mState, portal->surface());
   }
+  // TODO: Step down into the sub volume
 }
 
 void Acts::SurfaceMaterialMapper::checkAndInsert(State& mState,

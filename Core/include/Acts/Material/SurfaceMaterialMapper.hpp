@@ -77,6 +77,7 @@ struct MaterialSurface {
 ///
 class SurfaceMaterialMapper final : public IMaterialMapper {
  public:
+ // TODO: DetectorNavigator needed 
   using StraightLinePropagator = Propagator<StraightLineStepper, Navigator>;
 
   /// @struct Config
