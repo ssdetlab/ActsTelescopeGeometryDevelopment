@@ -79,4 +79,22 @@ struct GaussianDisplacedVertexPositionGenerator
     return Acts::Vector4(x, y, z, t);
   }
 };
+
+struct UniformPrimaryVertexPositionGenerator
+    : public EventGenerator::PrimaryVertexPositionGenerator {
+  Acts::Vector4 mins = {0.0, 0.0, 0.0, 0.0};
+  Acts::Vector4 maxs = {0.0, 0.0, 0.0, 0.0};
+
+  Acts::Vector4 operator()(RandomEngine& rng) const override {
+    auto uniform = std::uniform_real_distribution<double>(0.0, 1.0);
+    Acts::Vector4 rndUniform = {
+        uniform(rng),
+        uniform(rng),
+        uniform(rng),
+        uniform(rng),
+    };
+    return mins + rndUniform.cwiseProduct(maxs - mins);
+  }
+};
+
 }  // namespace ActsExamples

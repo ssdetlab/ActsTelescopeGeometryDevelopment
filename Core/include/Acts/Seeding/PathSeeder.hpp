@@ -11,8 +11,57 @@
 #include "Acts/EventData/SourceLink.hpp"
 #include "Acts/Surfaces/Surface.hpp"
 #include "Acts/Utilities/Delegate.hpp"
+#include "Acts/Utilities/GridIterator.hpp"
+
+#include "Acts/EventData/detail/TestSourceLink.hpp"
 
 namespace Acts::Experimental {
+
+struct SeedTree {
+    struct Node {
+        Node() = delete;
+        Node(SourceLink sl) : m_sourceLink(sl) {};
+
+        SourceLink m_sourceLink;
+        std::vector<std::shared_ptr<Node>> children;
+    };
+
+    SeedTree() = delete;
+
+    SeedTree(SourceLink sl) {
+        root = std::make_shared<Node>(sl);
+    }
+
+    std::vector<std::shared_ptr<Node>> initNodes(
+        std::vector<SourceLink> m_sourceLink) {
+            std::vector<std::shared_ptr<Node>> nodes;
+            for (auto sl : m_sourceLink) {
+                nodes.push_back(std::make_shared<Node>(sl));
+            }
+            return nodes;
+    }
+
+    std::vector<std::shared_ptr<Node>> addChildren(
+        std::shared_ptr<Node> parent, 
+        std::vector<std::shared_ptr<Node>> children) {
+            parent->children = children;
+            return parent->children;
+    }  
+
+    std::shared_ptr<Node> root;
+
+    /// The IP momentum magnitude
+    ActsScalar ipP;
+
+    /// The IP momentum direction
+    Vector3 ipDir;
+
+    /// The IP vertex position
+    Vector3 ipVertex;
+};
+
+
+
 
 /// @brief Seeding algorigthm that extracts
 /// the IP parameters and sorts the source links
@@ -45,33 +94,6 @@ class PathSeeder {
  public:
   using GridType = grid_t;
 
-  /// @brief The seed struct
-  ///
-  /// The seed struct contains the IP parameters
-  /// and the source links that are associated with
-  /// the seed.
-  struct Seed {
-    /// The IP momentum magnitude
-    ActsScalar ipP;
-
-    /// The IP momentum direction
-    Vector3 ipDir;
-
-    /// The IP vertex position
-    Vector3 ipVertex;
-
-    /// The source links associated with the seed
-    std::vector<SourceLink> sourceLinks;
-
-    Seed() = delete;
-    Seed(ActsScalar ipPmag, Vector3 ipPdir, Vector3 ipPos,
-         std::vector<SourceLink> sls)
-        : ipP(ipPmag),
-          ipDir(std::move(ipPdir)),
-          ipVertex(std::move(ipPos)),
-          sourceLinks(std::move(sls)) {};
-  };
-
   /// @brief Delegate to provide the relevant grid
   /// filled with source links for the given geometry
   /// member
@@ -79,7 +101,7 @@ class PathSeeder {
   /// @arg The geometry identifier to use
   ///
   /// @return The grid filled with source links
-  using SourceLinkGridLookup = Delegate<GridType(const GeometryIdentifier&)>;
+  using SourceLinkGridLookup = std::unordered_map<GeometryIdentifier,GridType>;
 
   /// @brief Delegate to estimate the IP parameters
   /// and the momentum direction at the first tracking layer
@@ -133,8 +155,6 @@ class PathSeeder {
 
   /// @brief The nested configuration struct
   struct Config {
-    /// Binned SourceLink provider
-    SourceLinkGridLookup sourceLinkGridLookup;
     /// Parameters estimator
     TrackEstimator trackEstimator;
     /// SourceLink calibrator
@@ -143,117 +163,132 @@ class PathSeeder {
     IntersectionLookup intersectionFinder;
     /// Path width provider
     PathWidthLookup pathWidthProvider;
-    /// First layer extent
-    Extent firstLayerExtent;
+    /// First layer IDs
+    std::vector<GeometryIdentifier> firstLayerIds;
     /// Direction of the telescope extent
     BinningValue orientation = BinningValue::binX;
   };
 
-  /// @brief Constructor
-  PathSeeder(const Config& config) : m_cfg(std::move(config)) {};
+    /// @brief Constructor
+    PathSeeder(const Config& config) : m_cfg(std::move(config)) {};
+    
+    /// @brief Destructor
+    ~PathSeeder() = default;
+    
+    /// @brief Extract the IP parameters and
+    /// sort the source links into the seeds
+    ///
+    /// @param gctx The geometry context
+    /// @param sourceLinks The source links to seed
+    ///
+    /// @return The vector of seeds
+    std::vector<SeedTree> getSeeds(
+        const GeometryContext& gctx,
+        const SourceLinkGridLookup& sourceLinkGridLookup) const {
+            // Get plane of the telescope
+            // sensitive surfaces
+            int bin0 = static_cast<int>(BinningValue::binX);
+            int bin1 = static_cast<int>(BinningValue::binY);
+            if (m_cfg.orientation == BinningValue::binX) {
+                bin0 = static_cast<int>(BinningValue::binY);
+                bin1 = static_cast<int>(BinningValue::binZ);
+            } else if (m_cfg.orientation == BinningValue::binY) {
+                bin0 = static_cast<int>(BinningValue::binX);
+                bin1 = static_cast<int>(BinningValue::binZ);
+            }
 
-  /// @brief Destructor
-  ~PathSeeder() = default;
+            // Create the seeds
+            std::vector<SeedTree> seeds;
+            for (auto& firstGeoId : m_cfg.firstLayerIds) {
+                auto firstGrid = sourceLinkGridLookup.at(firstGeoId);
 
-  /// @brief Extract the IP parameters and
-  /// sort the source links into the seeds
-  ///
-  /// @param gctx The geometry context
-  /// @param sourceLinks The source links to seed
-  ///
-  /// @return The vector of seeds
-  std::vector<Seed> getSeeds(const GeometryContext& gctx,
-                             const std::vector<SourceLink>& sourceLinks) const {
-    // Get plane of the telescope
-    // sensitive surfaces
-    int bin0 = static_cast<int>(BinningValue::binX);
-    int bin1 = static_cast<int>(BinningValue::binY);
-    if (m_cfg.orientation == BinningValue::binX) {
-      bin0 = static_cast<int>(BinningValue::binY);
-      bin1 = static_cast<int>(BinningValue::binZ);
-    } else if (m_cfg.orientation == BinningValue::binY) {
-      bin0 = static_cast<int>(BinningValue::binX);
-      bin1 = static_cast<int>(BinningValue::binZ);
-    }
+                for (auto it = firstGrid.begin(); it != firstGrid.end(); it++) {
+                    std::vector<SourceLink> pivotSourceLinks = *it;
 
-    // Create the seeds
-    std::vector<Seed> seeds;
-    for (const auto& sl : sourceLinks) {
-      Vector3 globalPos = m_cfg.sourceLinkCalibrator(gctx, sl);
+                    for (const auto& pivot : pivotSourceLinks) {
+                        Vector3 globalPos = m_cfg.sourceLinkCalibrator(gctx, pivot);
 
-      // Check if the hit is in the
-      // first tracking layer
-      if (!m_cfg.firstLayerExtent.contains(globalPos)) {
-        continue;
-      }
+                        // Get the IP parameters
+                        auto [q, ipP, ipVertex, ipDir, flDir] =
+                            m_cfg.trackEstimator(gctx, globalPos);
 
-      // Get the IP parameters
-      auto [q, ipP, ipVertex, ipDir, flDir] =
-          m_cfg.trackEstimator(gctx, globalPos);
+                        // Intersect with the surfaces
+                        std::vector<std::pair<GeometryIdentifier, Vector3>> intersections =
+                            m_cfg.intersectionFinder(gctx, globalPos, flDir, ipP, q);
 
-      // Intersect with the surfaces
-      std::vector<std::pair<GeometryIdentifier, Vector3>> intersections =
-          m_cfg.intersectionFinder(gctx, globalPos, flDir, ipP, q);
+                        // Continue if no intersections
+                        if (intersections.empty()) {
+                            continue;
+                        }
 
-      // Continue if no intersections
-      if (intersections.empty()) {
-        continue;
-      }
-      // Vector to store the source links
-      std::vector<SourceLink> seedSourceLinks;
+                        SeedTree seedTree(pivot);
+                        std::vector<std::shared_ptr<
+                            Acts::Experimental::SeedTree::Node>> currentNodes = {
+                                seedTree.root};
 
-      // Store the pivot source link
-      seedSourceLinks.push_back(sl);
+                        // Iterate over the intersections
+                        // and get the source links
+                        // in the subsequent layers
+                        for (auto& [geoId, refPoint] : intersections) {
+                            // Get the path width
+                            auto [pathWidth0, pathWidth1] = m_cfg.pathWidthProvider(gctx, geoId);
+                    
+                            // Get the bounds of the path
+                            ActsScalar top0 = refPoint[bin0] + pathWidth0;
+                            ActsScalar bot0 = refPoint[bin0] - pathWidth0;
+                            ActsScalar top1 = refPoint[bin1] + pathWidth1;
+                            ActsScalar bot1 = refPoint[bin1] - pathWidth1;
+                    
+                            // Get the lookup table for the source links
+                            auto grid = sourceLinkGridLookup.at(geoId);
+                    
+                            // Get the range of bins to search for source links
+                            auto botLeftBin = grid.localBinsFromPosition(Vector2(bot0, bot1));
+                            auto topRightBin = grid.localBinsFromPosition(Vector2(top0, top1));
+                    
+                            std::vector<std::shared_ptr<
+                                Acts::Experimental::SeedTree::Node>> currentChildren;
 
-      // Iterate over the intersections
-      // and get the source links
-      // in the subsequent layers
-      for (auto& [geoId, refPoint] : intersections) {
-        // Get the path width
-        auto [pathWidth0, pathWidth1] = m_cfg.pathWidthProvider(gctx, geoId);
+                            // Get the source links from the lookup table
+                            // by iterating over the bin ranges
+                            auto currentBin = botLeftBin;
+                            while (currentBin.at(1) <= topRightBin.at(1)) {
+                                while (currentBin.at(0) <= topRightBin.at(0)) {
+                                    auto sourceLinksToAdd = grid.atLocalBins(currentBin);
 
-        // Get the bounds of the path
-        ActsScalar top0 = refPoint[bin0] + pathWidth0;
-        ActsScalar bot0 = refPoint[bin0] - pathWidth0;
-        ActsScalar top1 = refPoint[bin1] + pathWidth1;
-        ActsScalar bot1 = refPoint[bin1] - pathWidth1;
+                                    auto nodes = seedTree.initNodes(sourceLinksToAdd);
+                                    currentChildren.insert(
+                                        currentChildren.end(), nodes.begin(), nodes.end());
 
-        // Get the lookup table for the source links
-        auto grid = m_cfg.sourceLinkGridLookup(geoId);
+                                    currentBin.at(0)++;
+                                }
+                                currentBin.at(1)++;
+                                currentBin.at(0) = botLeftBin.at(0);
+                            }
 
-        // Get the range of bins to search for source links
-        auto botLeftBin = grid.localBinsFromPosition(Vector2(bot0, bot1));
-        auto topRightBin = grid.localBinsFromPosition(Vector2(top0, top1));
+                            // Add the source links to the seed
+                            for (auto& node : currentNodes) {
+                                seedTree.addChildren(node, currentChildren);
+                            }
 
-        // Get the source links from the lookup table
-        // by iterating over the bin ranges
-        auto currentBin = botLeftBin;
-        while (currentBin.at(1) <= topRightBin.at(1)) {
-          while (currentBin.at(0) <= topRightBin.at(0)) {
-            auto sourceLinksToAdd = grid.atLocalBins(currentBin);
+                            // Update the current nodes
+                            currentNodes = currentChildren;
+                        }
+                    
+                        seedTree.ipP = ipP;
+                        seedTree.ipDir = ipDir;
+                        seedTree.ipVertex = ipVertex;
 
-            seedSourceLinks.insert(seedSourceLinks.end(),
-                                   sourceLinksToAdd.begin(),
-                                   sourceLinksToAdd.end());
-            currentBin.at(0)++;
-          }
-          currentBin.at(1)++;
-          currentBin.at(0) = botLeftBin.at(0);
-        }
-      }
+                        // Add the seed to the list
+                        seeds.push_back(seedTree);
+                    }
+                }
+            }
+            return seeds;
+    };
 
-      // Store the IP parameters and
-      // add the source links to the seed
-      Seed seed{ipP, ipDir, ipVertex, seedSourceLinks};
-
-      // Add the seed to the list
-      seeds.push_back(seed);
-    }
-    return seeds;
-  };
-
- private:
-  Config m_cfg;
+    private:
+        Config m_cfg;
 };
 
 }  // namespace Acts::Experimental

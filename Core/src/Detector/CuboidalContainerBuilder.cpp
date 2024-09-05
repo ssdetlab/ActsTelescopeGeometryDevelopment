@@ -142,6 +142,12 @@ Acts::Experimental::CuboidalContainerBuilder::construct(
   if (atNavigationLevel) {
     ACTS_VERBOSE(
         "Component volumes are at navigation level: connecting volumes.");
+
+    for (auto& v : volumes) {
+      ACTS_VERBOSE("-> Volume: " << v->name());
+      ACTS_VERBOSE(v->extent(gctx));
+    }
+
     // Connect volumes
     rContainer = Acts::Experimental::detail::CuboidalDetectorHelper::connect(
         gctx, volumes, m_cfg.binning, {}, logger().level());

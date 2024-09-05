@@ -49,8 +49,11 @@ struct NavigationOptions {
   /// Hint for end object
   const object_t* endObject = nullptr;
 
-  /// External surface identifier for which the boundary check is ignored
-  std::vector<GeometryIdentifier> externalSurfaces = {};
+  /// Measurement surface identifier for which the boundary check is ignored
+  std::vector<GeometryIdentifier> measurementSurfaces = {};
+
+  /// External surface identifier
+  std::vector<const Surface*> externalSurfaces = {};
 
   /// The minimum distance for a surface to be considered
   double nearLimit = 0;
@@ -88,7 +91,8 @@ class Navigator {
   using NavigationBoundaries =
       boost::container::small_vector<BoundaryIntersection, 4>;
 
-  using ExternalSurfaces = std::multimap<std::uint64_t, GeometryIdentifier>;
+  using MeasurementSurfaces =
+      std::multimap<std::uint64_t, GeometryIdentifier>;
 
   /// The navigation stage
   enum struct Stage : int {
@@ -112,11 +116,20 @@ class Navigator {
 
   struct Options : public NavigatorPlainOptions {
     /// Externally provided surfaces - these are tried to be hit
-    ExternalSurfaces externalSurfaces = {};
+    std::vector<const Surface*> externalSurfaces = {};
 
-    void insertExternalSurface(GeometryIdentifier geoid) {
-      externalSurfaces.insert(
-          std::pair<std::uint64_t, GeometryIdentifier>(geoid.layer(), geoid));
+    void insertExternalSurface(const Surface* surface) {
+      externalSurfaces.push_back(surface);
+    }
+
+    MeasurementSurfaces measurementSurfaces = {};
+    
+    /// Range of external surfaces to be considered
+    std::pair<MeasurementSurfaces::iterator, MeasurementSurfaces::iterator>
+        currentMeasurementSurfaceRange;
+
+    void insertMeasurementSurface(GeometryIdentifier geoId) {
+        measurementSurfaces.emplace(geoId.layer(), geoId);
     }
 
     void setPlainOptions(const NavigatorPlainOptions& options) {
@@ -181,20 +194,22 @@ class Navigator {
     bool navigationBreak = false;
     // The navigation stage (@todo: integrate break, target)
     Stage navigationStage = Stage::undefined;
+    /// Force intersection with boundaries
+    bool forceIntersectBoundaries = false;
 
     void reset() {
-      navSurfaces.clear();
-      navSurfaceIndex = navSurfaces.size();
-      navLayers.clear();
-      navLayerIndex = navLayers.size();
-      navBoundaries.clear();
-      navBoundaryIndex = navBoundaries.size();
-
-      currentVolume = nullptr;
-      currentLayer = nullptr;
-      currentSurface = nullptr;
-
-      navigationStage = Stage::undefined;
+        navSurfaces.clear();
+        navSurfaceIndex = navSurfaces.size();
+        navLayers.clear();
+        navLayerIndex = navLayers.size();
+        navBoundaries.clear();
+        navBoundaryIndex = navBoundaries.size();
+    
+        currentVolume = nullptr;
+        currentLayer = nullptr;
+        currentSurface = nullptr;
+    
+        navigationStage = Stage::undefined;
     }
   };
 
@@ -696,9 +711,9 @@ class Navigator {
     }
 
     auto layerID = state.navigation.navSurface().object()->geometryId().layer();
-    std::pair<ExternalSurfaces::iterator, ExternalSurfaces::iterator>
-        externalSurfaceRange =
-            state.navigation.options.externalSurfaces.equal_range(layerID);
+    std::pair<MeasurementSurfaces::iterator, MeasurementSurfaces::iterator>
+        measurementSurfaceRange =
+            state.navigation.options.measurementSurfaces.equal_range(layerID);
     // Loop over the remaining navigation surfaces
     while (state.navigation.navSurfaceIndex !=
            state.navigation.navSurfaces.size()) {
@@ -716,8 +731,8 @@ class Navigator {
                                   << surface->geometryId());
       // Estimate the surface status
       BoundaryTolerance boundaryTolerance = BoundaryTolerance::None();
-      for (auto it = externalSurfaceRange.first;
-           it != externalSurfaceRange.second; it++) {
+      for (auto it = measurementSurfaceRange.first;
+           it != measurementSurfaceRange.second; it++) {
         if (surface->geometryId() == it->second) {
           boundaryTolerance = BoundaryTolerance::Infinite();
           break;
@@ -1114,16 +1129,19 @@ class Navigator {
     navOpts.startObject = state.navigation.currentSurface;
     navOpts.endObject = state.navigation.targetSurface;
 
-    std::vector<GeometryIdentifier> externalSurfaces;
     if (!state.navigation.options.externalSurfaces.empty()) {
+      navOpts.externalSurfaces = state.navigation.options.externalSurfaces;
+    }
+
+    if (!state.navigation.options.measurementSurfaces.empty()) {
       auto layerID = layerSurface->geometryId().layer();
-      auto externalSurfaceRange =
-          state.navigation.options.externalSurfaces.equal_range(layerID);
-      navOpts.externalSurfaces.reserve(
-          state.navigation.options.externalSurfaces.count(layerID));
-      for (auto itSurface = externalSurfaceRange.first;
-           itSurface != externalSurfaceRange.second; itSurface++) {
-        navOpts.externalSurfaces.push_back(itSurface->second);
+      auto measurementSurfaceRange =
+          state.navigation.options.measurementSurfaces.equal_range(layerID);
+      navOpts.measurementSurfaces.reserve(
+          state.navigation.options.measurementSurfaces.count(layerID));
+      for (auto itSurface = measurementSurfaceRange.first;
+           itSurface != measurementSurfaceRange.second; itSurface++) {
+        navOpts.measurementSurfaces.push_back(itSurface->second);
       }
     }
 

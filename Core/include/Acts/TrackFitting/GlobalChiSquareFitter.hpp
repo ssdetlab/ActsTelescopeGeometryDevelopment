@@ -464,8 +464,17 @@ class Gx2Fitter {
       }
       result.startVolume = state.navigation.startVolume;
 
-      // We are only interested in surfaces. If we are not on a surface, we
-      // continue the navigation
+      // Add the measurement surfaces. We will try to hit those
+      // surfaces by ignoring boundary checks.
+      if (state.navigation.options.measurementSurfaces.size() == 0) {
+        for (auto measurementIt = inputMeasurements->begin();
+             measurementIt != inputMeasurements->end(); measurementIt++) {
+          state.navigation.options.insertMeasurementSurface(measurementIt->first);
+        }
+      }
+
+      // Update:
+      // - Waiting for a current surface
       auto surface = navigator.currentSurface(state.navigation);
       if (surface == nullptr) {
         return;
@@ -706,11 +715,10 @@ class Gx2Fitter {
     ACTS_VERBOSE("Preparing " << std::distance(it, end)
                               << " input measurements");
     std::map<GeometryIdentifier, SourceLink> inputMeasurements;
-
     for (; it != end; ++it) {
       SourceLink sl = *it;
-      auto geoId = gx2fOptions.extensions.surfaceAccessor(sl)->geometryId();
-      inputMeasurements.emplace(geoId, std::move(sl));
+      const Surface* surface = gx2fOptions.extensions.surfaceAccessor(sl);
+      inputMeasurements.emplace(surface->geometryId(), std::move(sl));
     }
     ACTS_VERBOSE("inputMeasurements.size() = " << inputMeasurements.size());
 
@@ -781,12 +789,6 @@ class Gx2Fitter {
       Acts::MagneticFieldContext magCtx = gx2fOptions.magFieldContext;
       // Set options for propagator
       PropagatorOptions propagatorOptions(geoCtx, magCtx);
-
-      // Add the measurement surface as external surface to the navigator.
-      // We will try to hit those surface by ignoring boundary checks.
-      for (const auto& [surfaceId, _] : inputMeasurements) {
-        propagatorOptions.navigation.insertExternalSurface(surfaceId);
-      }
 
       auto& gx2fActor = propagatorOptions.actionList.template get<GX2FActor>();
       gx2fActor.inputMeasurements = &inputMeasurements;

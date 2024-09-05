@@ -697,9 +697,8 @@ class MultiTrajectory {
 
   // This function will move to an rvalue reference in the next major version
   template <typename source_link_t>
-  void setUncalibratedSourceLink(IndexType istate, source_link_t&& sourceLink)
-    requires(!ReadOnly)
-  {
+  void setUncalibratedSourceLink(
+      IndexType istate, source_link_t&& sourceLink) requires(!ReadOnly) {
     self().setUncalibratedSourceLink_impl(
         istate, std::forward<source_link_t>(sourceLink));
   }

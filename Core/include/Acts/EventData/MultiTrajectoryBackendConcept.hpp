@@ -132,7 +132,7 @@ concept MutableMultiTrajectoryBackend =
 
       { v.allocateCalibrated_impl(istate, dim) };
 
-      { v.setUncalibratedSourceLink_impl(istate, std::move(sl)) };
+  {v.setUncalibratedSourceLink_impl(istate, std::move(sl))};
 
       { v.setReferenceSurface_impl(istate, surface) };
 

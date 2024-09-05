@@ -168,6 +168,24 @@ void addGenerators(Context& ctx) {
       .def_readwrite("fixed",
                      &ActsExamples::FixedPrimaryVertexPositionGenerator::fixed);
 
+  py::class_<
+      ActsExamples::UniformPrimaryVertexPositionGenerator,
+      ActsExamples::EventGenerator::PrimaryVertexPositionGenerator,
+      std::shared_ptr<ActsExamples::UniformPrimaryVertexPositionGenerator>>(
+      mex, "UniformVertexGenerator")
+      .def(py::init<>())
+      .def(py::init([](const Acts::Vector4& mins, const Acts::Vector4& maxs) {
+             ActsExamples::UniformPrimaryVertexPositionGenerator u;
+             u.mins = mins;
+             u.maxs = maxs;
+             return u;
+           }),
+           py::arg("mins"), py::arg("maxs"))
+      .def_readwrite("mins",
+                     &ActsExamples::UniformPrimaryVertexPositionGenerator::mins)
+      .def_readwrite(
+          "maxs", &ActsExamples::UniformPrimaryVertexPositionGenerator::maxs);
+
   py::class_<ActsExamples::SimParticle>(mex, "SimParticle");
   py::class_<ActsExamples::SimParticleContainer>(mex, "SimParticleContainer");
 

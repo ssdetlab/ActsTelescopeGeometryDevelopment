@@ -1082,29 +1082,15 @@ class KalmanFitter {
   /// @return the output as an output track
   template <typename source_link_iterator_t, typename start_parameters_t,
             typename parameters_t = BoundTrackParameters,
-            typename track_container_t, template <typename> class holder_t>
+            typename track_container_t, template <typename> class holder_t,
+            bool _isdn = isDirectNavigator>
   auto fit(source_link_iterator_t it, source_link_iterator_t end,
            const start_parameters_t& sParameters,
            const KalmanFitterOptions<traj_t>& kfOptions,
            TrackContainer<track_container_t, traj_t, holder_t>& trackContainer)
-      const -> Result<typename TrackContainer<track_container_t, traj_t,
-                                              holder_t>::TrackProxy>
-    requires(!isDirectNavigator)
-  {
-    // To be able to find measurements later, we put them into a map
-    // We need to copy input SourceLinks anyway, so the map can own them.
-    ACTS_VERBOSE("Preparing " << std::distance(it, end)
-                              << " input measurements");
-    std::map<GeometryIdentifier, SourceLink> inputMeasurements;
-    // for (const auto& sl : sourcelinks) {
-    for (; it != end; ++it) {
-      SourceLink sl = *it;
-      const Surface* surface = kfOptions.extensions.surfaceAccessor(sl);
-      // @TODO: This can probably change over to surface pointers as keys
-      auto geoId = surface->geometryId();
-      inputMeasurements.emplace(geoId, std::move(sl));
-    }
-
+      const -> std::enable_if_t<
+          !_isdn, Result<typename TrackContainer<track_container_t, traj_t,
+                                                 holder_t>::TrackProxy>> {
     // Create the ActionList and AbortList
     using KalmanAborter = Aborter<parameters_t>;
     using KalmanActor = Actor<parameters_t>;
@@ -1122,11 +1108,26 @@ class KalmanFitter {
     // Set the trivial propagator options
     propagatorOptions.setPlainOptions(kfOptions.propagatorPlainOptions);
 
-    // Add the measurement surface as external surface to navigator.
-    // We will try to hit those surface by ignoring boundary checks.
-    for (const auto& [surfaceId, _] : inputMeasurements) {
-      propagatorOptions.navigation.insertExternalSurface(surfaceId);
+    // To be able to find measurements later, we put them into a map
+    // We need to copy input SourceLinks anyway, so the map can own them.
+    ACTS_VERBOSE("Preparing " << std::distance(it, end)
+                              << " input measurements");
+    std::map<GeometryIdentifier, SourceLink> inputMeasurements;
+    // for (const auto& sl : sourcelinks) {
+    for (; it != end; ++it) {
+      SourceLink sl = *it;
+      const Surface* surface = kfOptions.extensions.surfaceAccessor(sl);
+      // @TODO: This can probably change over to surface pointers as keys
+      auto geoId = surface->geometryId();
+      inputMeasurements.emplace(geoId, std::move(sl));
     }
+
+    if constexpr (!isDirectNavigator) {
+        for (const auto& [surfaceId, _] : inputMeasurements) {
+            propagatorOptions.navigation.insertMeasurementSurface(surfaceId);
+        }
+    }
+
 
     // Catch the actor and set the measurements
     auto& kalmanActor =
@@ -1172,16 +1173,16 @@ class KalmanFitter {
   /// @return the output as an output track
   template <typename source_link_iterator_t, typename start_parameters_t,
             typename parameters_t = BoundTrackParameters,
-            typename track_container_t, template <typename> class holder_t>
+            typename track_container_t, template <typename> class holder_t,
+            bool _isdn = isDirectNavigator>
   auto fit(source_link_iterator_t it, source_link_iterator_t end,
            const start_parameters_t& sParameters,
            const KalmanFitterOptions<traj_t>& kfOptions,
            const std::vector<const Surface*>& sSequence,
            TrackContainer<track_container_t, traj_t, holder_t>& trackContainer)
-      const -> Result<typename TrackContainer<track_container_t, traj_t,
-                                              holder_t>::TrackProxy>
-    requires(isDirectNavigator)
-  {
+      const -> std::enable_if_t<
+          _isdn, Result<typename TrackContainer<track_container_t, traj_t,
+                                                holder_t>::TrackProxy>> {
     // To be able to find measurements later, we put them into a map
     // We need to copy input SourceLinks anyway, so the map can own them.
     ACTS_VERBOSE("Preparing " << std::distance(it, end)
@@ -1211,6 +1212,12 @@ class KalmanFitter {
 
     // Set the trivial propagator options
     propagatorOptions.setPlainOptions(kfOptions.propagatorPlainOptions);
+
+    if constexpr (!isDirectNavigator) {
+        for (const auto& [surfaceId, _] : inputMeasurements) {
+            propagatorOptions.navigation.insertMeasurementSurface(surfaceId);
+        }
+    }
 
     // Catch the actor and set the measurements
     auto& kalmanActor =

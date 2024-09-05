@@ -6,16 +6,15 @@ import argparse
 
 import acts
 from acts.examples import (
-    GaussianVertexGenerator,
+    UniformVertexGenerator,
     ParametricParticleGenerator,
     FixedMultiplicityGenerator,
     EventGenerator,
     RandomNumbers,
 )
 
-import acts.examples.dd4hep
-import acts.examples.geant4
-import acts.examples.geant4.dd4hep
+import acts.examples as ae
+import acts.examples.geant4 as ag4
 from acts.examples.odd import getOpenDataDetector
 
 u = acts.UnitConstants
@@ -26,9 +25,9 @@ _material_recording_executed = False
 def runMaterialRecording(
     detectorConstructionFactory,
     outputDir,
-    tracksPerEvent=10000,
+    tracksPerEvent=1,
     s=None,
-    etaRange=(-4, 4),
+    etaRange=(4, 4),
 ):
     global _material_recording_executed
     if _material_recording_executed:
@@ -42,9 +41,9 @@ def runMaterialRecording(
         generators=[
             EventGenerator.Generator(
                 multiplicity=FixedMultiplicityGenerator(n=1),
-                vertex=GaussianVertexGenerator(
-                    stddev=acts.Vector4(0, 0, 0, 0),
-                    mean=acts.Vector4(0, 0, 0, 0),
+                vertex=UniformVertexGenerator(
+                    mins=acts.Vector4(-8, 0, 16000, 0),
+                    maxs=acts.Vector4(8, 400, 16000, 0),
                 ),
                 particles=ParametricParticleGenerator(
                     pdg=acts.PdgParticle.eInvalid,
@@ -111,7 +110,7 @@ def main():
         )
     elif args.input.endswith(".gdml"):
         detectorConstructionFactory = (
-            acts.examples.geant4.GdmlDetectorConstructionFactory(args.input)
+            ag4.GdmlDetectorConstructionFactory(args.input)
         )
     elif args.input.endswith(".sqlite") or args.input.endswith(".db"):
         import acts.examples.geant4.geomodel
@@ -127,7 +126,7 @@ def main():
         detectorConstructionFactory=detectorConstructionFactory,
         tracksPerEvent=args.tracks,
         outputDir=os.getcwd(),
-        s=acts.examples.Sequencer(events=args.events, numThreads=1),
+        s=ae.Sequencer(events=args.events, numThreads=1),
     ).run()
 
 

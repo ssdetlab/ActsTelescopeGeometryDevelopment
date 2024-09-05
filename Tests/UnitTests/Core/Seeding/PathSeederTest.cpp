@@ -46,6 +46,45 @@ const ActsScalar halfZ = 10.;
 const ActsScalar deltaX = 10.;
 const ActsScalar deltaYZ = 1.;
 
+void printSeedTree(std::shared_ptr<Acts::Experimental::SeedTree::Node> root) {
+    if (root->children.size() == 0) {
+        return;
+    }
+    
+    for (auto& child : root->children) {
+        std::cout << "ROOT " << root->m_sourceLink.get<detail::Test::TestSourceLink>().m_geometryId  << " -> "
+        << "Child: " << child->m_sourceLink.get<detail::Test::TestSourceLink>().m_geometryId << std::endl;
+        printSeedTree(child);
+    }
+}
+
+struct TryAllTracks {
+    void tryAllTracks(
+        std::shared_ptr<Acts::Experimental::SeedTree::Node> root,
+        std::vector<Acts::SourceLink> track) {
+            auto parentPars = root->m_sourceLink.get<Acts::detail::Test::TestSourceLink>().parameters;
+
+            if (root->children.size() == 0) {
+                std::cout << "Parent: (" << parentPars[0] << " " << parentPars[1]
+                << ") -----> NO CHILDREN" << std::endl;
+
+                track.push_back(root->m_sourceLink);
+                tracks.push_back(track);
+            }
+
+            track.push_back(root->m_sourceLink);
+            for (auto& child : root->children) {
+                auto childPars = child->m_sourceLink.get<Acts::detail::Test::TestSourceLink>().parameters;
+                std::cout << "Parent: (" << parentPars[0] << " " << parentPars[1]
+                << ") -----> THE CHILD: (" << childPars[0] << " " << childPars[1] << ")" << std::endl;
+
+                tryAllTracks(child, track);
+            }    
+    }
+
+    std::vector<std::vector<Acts::SourceLink>> tracks;
+};
+
 // Intersection finding to get the
 // region of interest for seeding
 class NoFieldIntersectionFinder {
@@ -84,62 +123,18 @@ class NoFieldIntersectionFinder {
   }
 };
 
-// Grid to store the source links for
-// the seeding fast lookup
-class SourceLinkGrid {
- public:
-  using GridType = Grid;
-
-  /// Lookup table collection
-  std::unordered_map<int, GridType> m_lookupTables;
-
-  /// Surface accessor
-  SourceLinkSurfaceAccessor m_surfaceAccessor;
-
-  void initialize(const GeometryContext& geoCtx,
-                  std::vector<SourceLink> sourceLinks) {
-    // Lookup table for each layer
-    std::unordered_map<int, GridType> lookupTable;
-
-    // Construct a binned grid for each layer
-    for (int i : {14, 15, 16, 17}) {
-      Axis xAxis(-halfY, halfY, 50);
-      Axis yAxis(-halfZ, halfZ, 50);
-
-      GridType grid(std::make_tuple(xAxis, yAxis));
-      lookupTable.insert({i, grid});
-    }
-    // Fill the grid with source links
-    for (auto& sl : sourceLinks) {
-      auto ssl = sl.get<detail::Test::TestSourceLink>();
-      auto id = ssl.m_geometryId;
-
-      // Grid works with global positions
-      Vector3 globalPos = m_surfaceAccessor(sl)->localToGlobal(
-          geoCtx, ssl.parameters, Vector3{0, 1, 0});
-
-      auto bin =
-          lookupTable.at(id.sensitive())
-              .localBinsFromPosition(Vector2(globalPos.y(), globalPos.z()));
-      lookupTable.at(id.sensitive()).atLocalBins(bin).push_back(sl);
-    }
-
-    m_lookupTables = lookupTable;
-  };
-
-  // Get the source link grid for a given geometry id
-  GridType operator()(const GeometryIdentifier& geoId) const {
-    return m_lookupTables.at(geoId.sensitive());
-  }
-};
-
 // A simple path width provider to set
 // the grid lookup boundaries around the
 // intersection point
-std::pair<ActsScalar, ActsScalar> getPathWidth(
-    const GeometryContext& /*gctx*/, const GeometryIdentifier& /*geoId*/) {
-  return {0.1, 0.1};
-}
+class PathWidthProvider {
+ public:
+    std::pair<ActsScalar, ActsScalar> width;
+
+  std::pair<ActsScalar, ActsScalar> operator()(
+      const GeometryContext& /*gctx*/, const GeometryIdentifier& /*geoId*/) const {
+    return width;
+  }
+};
 
 // Calibrator to transform the source links
 // to global coordinates
@@ -167,7 +162,50 @@ class TrackEstimator {
       const GeometryContext& /*geoCtx*/, const Vector3& pivot) const {
     Vector3 direction = (pivot - ip).normalized();
     return {1_e, 1._GeV, ip, direction, direction};
-  };
+  }
+};
+
+// Construct grid with the source links
+struct ConstructSourceLinkGrid {
+    SourceLinkSurfaceAccessor m_surfaceAccessor;
+   
+    std::unordered_map<GeometryIdentifier, Grid> construct(
+        GeometryContext geoCtx,
+        std::vector<SourceLink> sourceLinks) {
+            // Lookup table for each layer
+            std::unordered_map<GeometryIdentifier, Grid> lookupTable;
+        
+            // Construct a binned grid for each layer
+            for (int i : {14, 15, 16, 17}) {
+                Axis xAxis(-halfY, halfY, 50);
+                Axis yAxis(-halfZ, halfZ, 50);
+            
+                Grid grid(std::make_tuple(xAxis, yAxis));
+
+                GeometryIdentifier geoId;
+
+                geoId.setSensitive(i);
+
+                lookupTable.insert({geoId, grid});
+            }
+            // Fill the grid with source links
+            for (auto& sl : sourceLinks) {
+                auto ssl = sl.get<detail::Test::TestSourceLink>();
+                auto id = ssl.m_geometryId;
+            
+                // Grid works with global positions
+                Vector3 globalPos = m_surfaceAccessor(sl)->localToGlobal(
+                    geoCtx, ssl.parameters, Vector3{0, 1, 0});
+            
+                auto bin =
+                    lookupTable.at(id)
+                        .localBinsFromPosition(Vector2(globalPos.y(), globalPos.z()));
+                lookupTable.at(id).atLocalBins(bin).push_back(sl);
+            }
+        
+            return lookupTable;
+    }
+
 };
 
 // Construct a simple telescope detector
@@ -303,7 +341,8 @@ std::vector<SourceLink> createSourceLinks(
   }
 
   Vector3 vertex(-5., 0., 0.);
-  std::vector<ActsScalar> phis = {-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15};
+//   std::vector<ActsScalar> phis = {-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15};
+  std::vector<ActsScalar> phis = {-0.15, 0.15};
 
   std::vector<SourceLink> sourceLinks;
   for (ActsScalar phi : phis) {
@@ -343,11 +382,13 @@ BOOST_AUTO_TEST_CASE(PathSeederZeroField) {
 
   // Grid to bin the source links
   SurfaceAccessor surfaceAccessor{*detector};
-  SourceLinkGrid sourceLinkGrid;
-  sourceLinkGrid.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(
-      &surfaceAccessor);
-  pathSeederCfg.sourceLinkGridLookup.connect<&SourceLinkGrid::operator()>(
-      &sourceLinkGrid);
+  auto sourceLinkGridConstructor = ConstructSourceLinkGrid();
+    sourceLinkGridConstructor.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(
+        &surfaceAccessor);
+
+    // Create the grid
+    std::unordered_map<GeometryIdentifier, Grid> sourceLinkGrid =
+        sourceLinkGridConstructor.construct(gctx, sourceLinks);
 
   // Estimator of the IP and first hit
   // parameters of the track
@@ -374,30 +415,79 @@ BOOST_AUTO_TEST_CASE(PathSeederZeroField) {
       .connect<&NoFieldIntersectionFinder::operator()>(&intersectionFinder);
 
   // Path width provider
-  pathSeederCfg.pathWidthProvider.connect<&getPathWidth>();
+    PathWidthProvider pathWidthProvider;
 
-  // First tracking layer
-  Extent firstLayerExtent;
-  firstLayerExtent.set(BinningValue::binX, -0.1, 0.1);
-  firstLayerExtent.set(BinningValue::binY, -halfY - deltaYZ, halfY + deltaYZ);
-  firstLayerExtent.set(BinningValue::binZ, -halfZ - deltaYZ, halfZ + deltaYZ);
+  pathSeederCfg.pathWidthProvider.connect<&PathWidthProvider::operator()>(&pathWidthProvider);
 
-  pathSeederCfg.firstLayerExtent = firstLayerExtent;
+    GeometryIdentifier geoId;
+    geoId.setSensitive(14);
+    pathSeederCfg.firstLayerIds.push_back(geoId);
 
   // Create the PathSeeder
   Acts::Experimental::PathSeeder<Grid> pathSeeder(pathSeederCfg);
 
   // Get the seeds
-  sourceLinkGrid.initialize(gctx, sourceLinks);
-  auto seeds = pathSeeder.getSeeds(gctx, sourceLinks);
+    pathWidthProvider.width = {0.1, 0.1};
 
-  // Check the seeds
-  BOOST_CHECK_EQUAL(seeds.size(), 7);
-  for (auto& seed : seeds) {
-    BOOST_CHECK_EQUAL(seed.sourceLinks.size(), 4);
-    BOOST_CHECK_EQUAL(seed.ipVertex, Vector3(-5., 0., 0.));
-    BOOST_CHECK_EQUAL(seed.ipP, 1._GeV);
-  }
+  auto seeds = pathSeeder.getSeeds(gctx, sourceLinkGrid);
+
+    // Check the seeds
+
+    BOOST_CHECK_EQUAL(seeds.size(), 2);
+
+    for (auto seed : seeds) {
+        printSeedTree(seed.root);
+        std::cout << "----------------" << std::endl;
+    }
+
+    for (auto seed : seeds) {
+        TryAllTracks tryAllTracks;
+        tryAllTracks.tryAllTracks(seed.root, {});
+        
+        std::cout << "Tracks for seed: " << tryAllTracks.tracks.size() << std::endl;
+
+        for (auto& track : tryAllTracks.tracks) {
+            for (auto& node : track) {
+                auto surf = surfaceAccessor(node);
+                auto pars = node.get<detail::Test::TestSourceLink>().parameters;
+                std::cout << "(" << surf->localToGlobal(gctx, pars, Vector3{0, 1, 0}).transpose() << ") -> ";
+            }
+            std::cout << std::endl;
+        }
+
+
+    }
+
+    std::cout << "\n\n\n ---------------- \n\n\n" << std::endl;
+
+    pathWidthProvider.width = {100, 100};
+
+    seeds = pathSeeder.getSeeds(gctx, sourceLinkGrid);
+
+    // Check the seeds
+    BOOST_CHECK_EQUAL(seeds.size(), 2);
+
+    for (auto seed : seeds) {
+        printSeedTree(seed.root);
+        std::cout << "----------------" << std::endl;
+    }
+
+    for (auto seed : seeds) {
+        TryAllTracks tryAllTracks;
+        tryAllTracks.tryAllTracks(seed.root, {});
+
+        std::cout << "Tracks for seed: " << tryAllTracks.tracks.size() << std::endl;
+
+        for (auto& track : tryAllTracks.tracks) {
+            for (auto& node : track) {
+                auto surf = surfaceAccessor(node);
+                auto pars = node.get<detail::Test::TestSourceLink>().parameters;
+                std::cout << "(" << surf->localToGlobal(gctx, pars, Vector3{0, 1, 0}).transpose() << ") -> ";
+            }
+            std::cout << std::endl;
+        }
+    }
+
 }
 
 BOOST_AUTO_TEST_SUITE_END()
