@@ -236,10 +236,12 @@ class DetectorNavigator {
                    << ")");
 
       BoundaryTolerance boundaryTolerance = c.boundaryTolerance;
+      bool isMeasurementSurface = false;
       if (c.surface != nullptr) {
         for (auto it = nState.currentMeasurementSurfaceRange.first;
              it != nState.currentMeasurementSurfaceRange.second; ++it) {
           if (surface.geometryId() == it->second) {
+            isMeasurementSurface = true;
             boundaryTolerance = BoundaryTolerance::Infinite();
             break;
           }
@@ -257,7 +259,7 @@ class DetectorNavigator {
 
       if (surfaceStatus == Intersection3D::Status::onSurface &&
         c.surface != nullptr &&
-        c.surface != nState.currentSurface) {
+        isMeasurementSurface) {
             ACTS_VERBOSE(volInfo(state)
                         << posInfo(state, stepper) << "landed on measurement surface");
             stepper.updateStepSize(state.stepping, 0, ConstrainedStep::Type::actor, true);

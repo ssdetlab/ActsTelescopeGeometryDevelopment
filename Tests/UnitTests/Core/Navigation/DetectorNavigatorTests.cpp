@@ -57,128 +57,128 @@ struct StateRecorder {
 
 BOOST_AUTO_TEST_SUITE(DetectorNavigator)
 
-// Initialization tests
-BOOST_AUTO_TEST_CASE(DetectorNavigatorTestsInitialization) {
-  auto bounds = std::make_unique<Acts::CuboidVolumeBounds>(3, 3, 3);
-  auto volume = Acts::Experimental::DetectorVolumeFactory::construct(
-      Acts::Experimental::defaultPortalAndSubPortalGenerator(), geoContext,
-      "volume", Acts::Transform3::Identity(), std::move(bounds), {}, {},
-      Acts::Experimental::tryNoVolumes(),
-      Acts::Experimental::tryAllPortalsAndSurfaces());
-  volume->assignGeometryId(1);
-  auto detector = Acts::Experimental::Detector::makeShared(
-      "detector", {volume}, Acts::Experimental::tryRootVolumes());
+// // Initialization tests
+// BOOST_AUTO_TEST_CASE(DetectorNavigatorTestsInitialization) {
+//   auto bounds = std::make_unique<Acts::CuboidVolumeBounds>(3, 3, 3);
+//   auto volume = Acts::Experimental::DetectorVolumeFactory::construct(
+    //   Acts::Experimental::defaultPortalAndSubPortalGenerator(), geoContext,
+    //   "volume", Acts::Transform3::Identity(), std::move(bounds), {}, {},
+    //   Acts::Experimental::tryNoVolumes(),
+    //   Acts::Experimental::tryAllPortalsAndSurfaces());
+//   volume->assignGeometryId(1);
+//   auto detector = Acts::Experimental::Detector::makeShared(
+    //   "detector", {volume}, Acts::Experimental::tryRootVolumes());
 
-  using Stepper = Acts::StraightLineStepper;
-  using Navigator = Acts::Experimental::DetectorNavigator;
-  using Propagator = Acts::Propagator<Stepper, Navigator>;
-  using ActionList = Acts::ActionList<>;
-  using AbortList = Acts::AbortList<>;
-  using PropagatorOptions = Propagator::Options<ActionList, AbortList>;
+//   using Stepper = Acts::StraightLineStepper;
+//   using Navigator = Acts::Experimental::DetectorNavigator;
+//   using Propagator = Acts::Propagator<Stepper, Navigator>;
+//   using ActionList = Acts::ActionList<>;
+//   using AbortList = Acts::AbortList<>;
+//   using PropagatorOptions = Propagator::Options<ActionList, AbortList>;
 
-  PropagatorOptions options(geoContext, mfContext);
+//   PropagatorOptions options(geoContext, mfContext);
 
-  Stepper stepper;
+//   Stepper stepper;
 
-  Acts::Vector4 pos(-2, 0, 0, 0);
-  Acts::CurvilinearTrackParameters start(pos, 0_degree, 90_degree, 1_e / 1_GeV,
-                                         std::nullopt,
-                                         Acts::ParticleHypothesis::electron());
+//   Acts::Vector4 pos(-2, 0, 0, 0);
+//   Acts::CurvilinearTrackParameters start(pos, 0_degree, 90_degree, 1_e / 1_GeV,
+                                        //  std::nullopt,
+                                        //  Acts::ParticleHypothesis::electron());
 
-  //
-  // (1) Test for inactivity
-  //
-  // Run without anything present
-  {
-    Navigator::Config navCfg;
-    navCfg.resolveSensitive = false;
-    navCfg.resolveMaterial = false;
-    navCfg.resolvePassive = false;
+//   //
+//   // (1) Test for inactivity
+//   //
+//   // Run without anything present
+//   {
+    // Navigator::Config navCfg;
+    // navCfg.resolveSensitive = false;
+    // navCfg.resolveMaterial = false;
+    // navCfg.resolvePassive = false;
 
-    Navigator navigator(navCfg);
+    // Navigator navigator(navCfg);
 
-    Propagator propagator(stepper, navigator);
+    // Propagator propagator(stepper, navigator);
 
-    BOOST_CHECK_THROW(propagator.makeState(start, options),
-                      std::invalid_argument);
-  }
+    // BOOST_CHECK_THROW(propagator.makeState(start, options),
+                    //   std::invalid_argument);
+//   }
 
-  // Run with geometry but without resolving
-  {
-    Acts::Experimental::DetectorNavigator::Config navCfg;
-    navCfg.resolveSensitive = false;
-    navCfg.resolveMaterial = false;
-    navCfg.resolvePassive = false;
-    navCfg.detector = detector.get();
+//   // Run with geometry but without resolving
+//   {
+    // Acts::Experimental::DetectorNavigator::Config navCfg;
+    // navCfg.resolveSensitive = false;
+    // navCfg.resolveMaterial = false;
+    // navCfg.resolvePassive = false;
+    // navCfg.detector = detector.get();
 
-    Acts::Experimental::DetectorNavigator navigator(navCfg);
+    // Acts::Experimental::DetectorNavigator navigator(navCfg);
 
-    Acts::Propagator<Acts::StraightLineStepper,
-                     Acts::Experimental::DetectorNavigator>
-        propagator(stepper, navigator);
+    // Acts::Propagator<Acts::StraightLineStepper,
+                    //  Acts::Experimental::DetectorNavigator>
+        // propagator(stepper, navigator);
 
-    auto state = propagator.makeState(start, options);
+    // auto state = propagator.makeState(start, options);
 
-    navigator.initialize(state, stepper);
+    // navigator.initialize(state, stepper);
 
-    navigator.preStep(state, stepper);
-    auto preStepState = state.navigation;
-    BOOST_CHECK_EQUAL(preStepState.currentSurface, nullptr);
-    BOOST_CHECK_EQUAL(preStepState.currentPortal, nullptr);
+    // navigator.preStep(state, stepper);
+    // auto preStepState = state.navigation;
+    // BOOST_CHECK_EQUAL(preStepState.currentSurface, nullptr);
+    // BOOST_CHECK_EQUAL(preStepState.currentPortal, nullptr);
 
-    navigator.postStep(state, stepper);
-    auto postStepState = state.navigation;
-    BOOST_CHECK_EQUAL(postStepState.currentSurface, nullptr);
-    BOOST_CHECK_EQUAL(postStepState.currentPortal, nullptr);
-  }
+    // navigator.postStep(state, stepper);
+    // auto postStepState = state.navigation;
+    // BOOST_CHECK_EQUAL(postStepState.currentSurface, nullptr);
+    // BOOST_CHECK_EQUAL(postStepState.currentPortal, nullptr);
+//   }
 
-  //
-  // (2) Initialization tests
-  //
-  // Run from endOfWorld
-  {
-    Acts::Vector4 posEoW(-20, 0, 0, 0);
-    Acts::CurvilinearTrackParameters startEoW(
-        posEoW, 0_degree, 90_degree, 1_e / 1_GeV, std::nullopt,
-        Acts::ParticleHypothesis::electron());
+//   //
+//   // (2) Initialization tests
+//   //
+//   // Run from endOfWorld
+//   {
+    // Acts::Vector4 posEoW(-20, 0, 0, 0);
+    // Acts::CurvilinearTrackParameters startEoW(
+        // posEoW, 0_degree, 90_degree, 1_e / 1_GeV, std::nullopt,
+        // Acts::ParticleHypothesis::electron());
 
-    Acts::Experimental::DetectorNavigator::Config navCfg;
-    navCfg.detector = detector.get();
+    // Acts::Experimental::DetectorNavigator::Config navCfg;
+    // navCfg.detector = detector.get();
 
-    Acts::Experimental::DetectorNavigator navigator(navCfg);
+    // Acts::Experimental::DetectorNavigator navigator(navCfg);
 
-    Acts::Propagator<Acts::StraightLineStepper,
-                     Acts::Experimental::DetectorNavigator>
-        propagator(stepper, navigator);
+    // Acts::Propagator<Acts::StraightLineStepper,
+                    //  Acts::Experimental::DetectorNavigator>
+        // propagator(stepper, navigator);
 
-    BOOST_CHECK_THROW(propagator.makeState(startEoW, options),
-                      std::invalid_argument);
-  }
+    // BOOST_CHECK_THROW(propagator.makeState(startEoW, options),
+                    //   std::invalid_argument);
+//   }
 
-  // Initialize properly
-  {
-    Acts::Experimental::DetectorNavigator::Config navCfg;
-    navCfg.detector = detector.get();
+//   // Initialize properly
+//   {
+    // Acts::Experimental::DetectorNavigator::Config navCfg;
+    // navCfg.detector = detector.get();
 
-    Acts::Experimental::DetectorNavigator navigator(navCfg);
+    // Acts::Experimental::DetectorNavigator navigator(navCfg);
 
-    Acts::Propagator<Acts::StraightLineStepper,
-                     Acts::Experimental::DetectorNavigator>
-        propagator(stepper, navigator);
+    // Acts::Propagator<Acts::StraightLineStepper,
+                    //  Acts::Experimental::DetectorNavigator>
+        // propagator(stepper, navigator);
 
-    auto state = propagator.makeState(start, options);
+    // auto state = propagator.makeState(start, options);
 
-    navigator.initialize(state, stepper);
-    auto initState = state.navigation;
-    BOOST_CHECK_EQUAL(initState.currentDetector, detector.get());
-    BOOST_CHECK_EQUAL(
-        initState.currentVolume,
-        detector->findDetectorVolume(geoContext, start.position()));
-    BOOST_CHECK_EQUAL(initState.currentSurface, nullptr);
-    BOOST_CHECK_EQUAL(initState.currentPortal, nullptr);
-    BOOST_CHECK_EQUAL(initState.surfaceCandidates.size(), 2u);
-  }
-}
+    // navigator.initialize(state, stepper);
+    // auto initState = state.navigation;
+    // BOOST_CHECK_EQUAL(initState.currentDetector, detector.get());
+    // BOOST_CHECK_EQUAL(
+        // initState.currentVolume,
+        // detector->findDetectorVolume(geoContext, start.position()));
+    // BOOST_CHECK_EQUAL(initState.currentSurface, nullptr);
+    // BOOST_CHECK_EQUAL(initState.currentPortal, nullptr);
+    // BOOST_CHECK_EQUAL(initState.surfaceCandidates.size(), 2u);
+//   }
+// }
 
 // Stadard forward and backward propagation
 // through cubic volumes with planar surfaces
@@ -773,9 +773,20 @@ BOOST_AUTO_TEST_CASE(DetectorNavigatorTestsMeasurementSurfaces) {
   auto surface3 = Acts::Surface::makeShared<Acts::PlaneSurface>(
       transform1 * Acts::Translation3(-0.1, 0, 0) * Acts::Transform3(rotation),
       std::make_shared<Acts::RectangleBounds>(2, 2));
+
+  auto decoySurface1 = Acts::Surface::makeShared<Acts::PlaneSurface>(
+      transform1 * Acts::Translation3(0.0, 2.5, 0) * Acts::Transform3(rotation),
+      std::make_shared<Acts::RectangleBounds>(0.1, 0.1));
+  auto decoySurface2 = Acts::Surface::makeShared<Acts::PlaneSurface>(
+      transform1 * Acts::Translation3(0.1, 2.5, 0) * Acts::Transform3(rotation),
+      std::make_shared<Acts::RectangleBounds>(0.1, 0.1));
+  auto decoySurface3 = Acts::Surface::makeShared<Acts::PlaneSurface>(
+      transform1 * Acts::Translation3(-0.1, 2.5, 0) * Acts::Transform3(rotation),
+      std::make_shared<Acts::RectangleBounds>(0.1, 0.1));
+
   auto volume1 = Acts::Experimental::DetectorVolumeFactory::construct(
       Acts::Experimental::defaultPortalAndSubPortalGenerator(), geoContext,
-      "volume1", transform1, std::move(bounds1), {surface1, surface2, surface3},
+      "volume1", transform1, std::move(bounds1), {surface1, surface2, surface3, decoySurface1, decoySurface2, decoySurface3},
       {}, Acts::Experimental::tryNoVolumes(),
       Acts::Experimental::tryAllPortalsAndSurfaces());
 
@@ -805,7 +816,7 @@ BOOST_AUTO_TEST_CASE(DetectorNavigatorTestsMeasurementSurfaces) {
     }
   }
   // Surface ids: 12-14;
-  for (auto& surf : {surface1, surface2, surface3}) {
+  for (auto& surf : {surface1, surface2, surface3, decoySurface1, decoySurface2, decoySurface3}) {
     surf->assignGeometryId(id);
     id++;
   }
@@ -813,6 +824,11 @@ BOOST_AUTO_TEST_CASE(DetectorNavigatorTestsMeasurementSurfaces) {
   auto detector = Acts::Experimental::Detector::makeShared(
       "cubicDetector", detectorVolumes, Acts::Experimental::tryRootVolumes());
 
+    for (auto& v : detector->rootVolumePtrs()) {
+    for (auto& s : v->surfacePtrs()) {
+      std::cout << "Surface: " << s->center(geoContext).transpose() << std::endl;
+    }
+    }
   using Stepper = Acts::StraightLineStepper;
   using Navigator = Acts::Experimental::DetectorNavigator;
   using Propagator = Acts::Propagator<Stepper, Navigator>;

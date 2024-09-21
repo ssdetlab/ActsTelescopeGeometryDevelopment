@@ -30,6 +30,16 @@
 #include "Acts/Tests/CommonHelpers/MeasurementsCreator.hpp"
 #include "Acts/Utilities/Logger.hpp"
 
+#include "Acts/Propagator/StraightLineStepper.hpp"
+#include "Acts/TrackFinding/CombinatorialKalmanFilter.hpp"
+#include "Acts/TrackFitting/KalmanFitter.hpp"
+#include "Acts/EventData/TrackContainer.hpp"
+#include "Acts/EventData/VectorMultiTrajectory.hpp"
+#include "Acts/EventData/VectorTrackContainer.hpp"
+#include "Acts/TrackFitting/GainMatrixSmoother.hpp"
+#include "Acts/TrackFitting/GainMatrixUpdater.hpp"
+#include "Acts/TrackFinding/MeasurementSelector.hpp"
+
 BOOST_AUTO_TEST_SUITE(PathSeeder)
 
 using namespace Acts;
@@ -38,52 +48,178 @@ using namespace Acts::UnitLiterals;
 using Axis = Acts::Axis<AxisType::Equidistant, AxisBoundaryType::Open>;
 using Grid = Acts::Grid<std::vector<SourceLink>, Axis, Axis>;
 
-GeometryContext gctx;
-
 // Parameters for the geometry
 const ActsScalar halfY = 10.;
 const ActsScalar halfZ = 10.;
 const ActsScalar deltaX = 10.;
 const ActsScalar deltaYZ = 1.;
 
-void printSeedTree(std::shared_ptr<Acts::Experimental::SeedTree::Node> root) {
-    if (root->children.size() == 0) {
-        return;
-    }
+using TrackContainer = Acts::TrackContainer<
+    Acts::VectorTrackContainer,
+    Acts::VectorMultiTrajectory,
+    Acts::detail::ValueHolder>;
+
+using TrackStateContainerBackend =
+    typename TrackContainer::TrackStateContainerBackend;
+
+/// The map(-like) container accessor
+template <typename container_t>
+struct TestContainerAccessor {
+    using Container = container_t;
+    using Key = typename container_t::key_type;
+    using Value = typename container_t::mapped_type;
     
-    for (auto& child : root->children) {
-        std::cout << "ROOT " << root->m_sourceLink.get<detail::Test::TestSourceLink>().m_geometryId  << " -> "
-        << "Child: " << child->m_sourceLink.get<detail::Test::TestSourceLink>().m_geometryId << std::endl;
-        printSeedTree(child);
+    /// This iterator adapter is needed to have the deref operator return a single
+    /// source link instead of the map pair <GeometryIdentifier,SourceLink>
+    struct Iterator {
+        using BaseIterator = typename container_t::const_iterator;
+    
+        using iterator_category = typename BaseIterator::iterator_category;
+        using value_type = typename BaseIterator::value_type;
+        using difference_type = typename BaseIterator::difference_type;
+        using pointer = typename BaseIterator::pointer;
+        using reference = typename BaseIterator::reference;
+    
+        Iterator& operator++() {
+        ++m_iterator;
+            return *this;
+        }
+    
+        bool operator==(const Iterator& other) const {
+            return m_iterator == other.m_iterator;
+        }
+    
+        bool operator!=(const Iterator& other) const { return !(*this == other); }
+    
+        Acts::SourceLink operator*() const {
+            const auto& sl = m_iterator->second;
+            return Acts::SourceLink{sl};
+        }
+    
+        BaseIterator m_iterator;
+    };
+    
+    // pointer to the container
+    const Container* container = nullptr;
+    
+    // get the range of elements with requested key
+    std::pair<Iterator, Iterator> range(const Acts::Surface& surface) const {
+        assert(container != nullptr);
+        auto [begin, end] = container->equal_range(surface.geometryId());
+        return {Iterator{begin}, Iterator{end}};
     }
+};
+
+class BranchStopper {
+    public:
+        using BranchStopperResult =
+            Acts::CombinatorialKalmanFilterBranchStopperResult;
+
+        struct Config {
+            int minMeasurements = 3;
+        };
+
+        BranchStopper(Config cfg) : m_cfg(std::move(cfg)) {};
+
+        BranchStopperResult operator()(
+            const TrackContainer::TrackProxy& track,
+            const TrackContainer::TrackStateProxy& trackState) const {
+        
+            // bool enoughMeasurements =
+                // track.nMeasurements() >= m_cfg.minMeasurements;
+            // if (!enoughMeasurements) {
+                // return BranchStopperResult::Continue;
+            // }
+            // else {
+                // return BranchStopperResult::StopAndKeep;
+            // }
+            return BranchStopperResult::Continue;
+        }
+        
+    private:
+        const Config m_cfg;
+};
+
+BranchStopper branchStopper({2});
+
+using StraightPropagator =
+    Acts::Propagator<
+        Acts::StraightLineStepper, 
+        Acts::Experimental::DetectorNavigator>;
+using ConstantFieldStepper = Acts::EigenStepper<>;
+using ConstantFieldPropagator =
+    Acts::Propagator<
+    ConstantFieldStepper, 
+    Acts::Experimental::DetectorNavigator>;
+
+using KalmanUpdater = Acts::GainMatrixUpdater;
+using KalmanSmoother = Acts::GainMatrixSmoother;
+using CombinatorialKalmanFilter =
+    Acts::CombinatorialKalmanFilter<ConstantFieldPropagator, TrackContainer>;
+using TestSourceLinkContainer =
+    std::unordered_multimap<
+        Acts::GeometryIdentifier, 
+        Acts::detail::Test::TestSourceLink>;
+using TestSourceLinkAccessor = TestContainerAccessor<TestSourceLinkContainer>;
+using CombinatorialKalmanFilterOptions =
+    Acts::CombinatorialKalmanFilterOptions<
+        TestSourceLinkAccessor::Iterator,
+        TrackContainer>;
+
+KalmanUpdater kfUpdater;
+KalmanSmoother kfSmoother;
+
+Acts::GeometryContext gctx;
+Acts::MagneticFieldContext mctx;
+Acts::CalibrationContext cctx;
+
+// configuration for the measurement selector
+Acts::MeasurementSelector::Config measurementSelectorCfg = {
+    // global default: no chi2 cut, only one measurement per surface
+    {Acts::GeometryIdentifier(),
+    {{}, {10000000000}, {1000u}}},
+};
+
+Acts::MeasurementSelector measSel{measurementSelectorCfg};
+
+ConstantFieldPropagator makeConstantFieldPropagator(
+    std::shared_ptr<const Acts::Experimental::Detector> geo, double bz) {
+        Acts::Experimental::DetectorNavigator::Config cfg;
+        cfg.detector = geo.get();
+        cfg.resolvePassive = false;
+        cfg.resolveMaterial = true;
+        cfg.resolveSensitive = true;
+        Acts::Experimental::DetectorNavigator navigator(
+            cfg,
+            Acts::getDefaultLogger("DetectorNavigator", Acts::Logging::VERBOSE));
+        auto field =
+            std::make_shared<Acts::ConstantBField>(Acts::Vector3(0.0, 0.0, bz));
+        ConstantFieldStepper stepper(std::move(field));
+        return ConstantFieldPropagator(std::move(stepper), std::move(navigator));
 }
 
-struct TryAllTracks {
-    void tryAllTracks(
-        std::shared_ptr<Acts::Experimental::SeedTree::Node> root,
-        std::vector<Acts::SourceLink> track) {
-            auto parentPars = root->m_sourceLink.get<Acts::detail::Test::TestSourceLink>().parameters;
+Acts::CombinatorialKalmanFilterExtensions<TrackContainer> 
+    getExtensions() {
+        Acts::CombinatorialKalmanFilterExtensions<TrackContainer> extensions;
+            extensions.calibrator.template connect<
+                &Acts::detail::Test::testSourceLinkCalibrator<TrackStateContainerBackend>>();
+        extensions.updater.template connect<
+            &KalmanUpdater::operator()<TrackStateContainerBackend>>(&kfUpdater);
+        extensions.measurementSelector.template connect<
+            &Acts::MeasurementSelector::select<TrackStateContainerBackend>>(
+            &measSel);
+        extensions.branchStopper.template connect<
+            &BranchStopper::operator()>(&branchStopper);
+        return extensions;
+}
 
-            if (root->children.size() == 0) {
-                std::cout << "Parent: (" << parentPars[0] << " " << parentPars[1]
-                << ") -----> NO CHILDREN" << std::endl;
-
-                track.push_back(root->m_sourceLink);
-                tracks.push_back(track);
-            }
-
-            track.push_back(root->m_sourceLink);
-            for (auto& child : root->children) {
-                auto childPars = child->m_sourceLink.get<Acts::detail::Test::TestSourceLink>().parameters;
-                std::cout << "Parent: (" << parentPars[0] << " " << parentPars[1]
-                << ") -----> THE CHILD: (" << childPars[0] << " " << childPars[1] << ")" << std::endl;
-
-                tryAllTracks(child, track);
-            }    
-    }
-
-    std::vector<std::vector<Acts::SourceLink>> tracks;
-};
+CombinatorialKalmanFilterOptions makeCkfOptions() {
+    // leave the accessor empty, this will have to be set before running the CKF
+    return CombinatorialKalmanFilterOptions(
+        gctx, mctx, cctx,
+        Acts::SourceLinkAccessorDelegate<TestSourceLinkAccessor::Iterator>{},
+        getExtensions(), Acts::PropagatorPlainOptions(gctx, mctx));
+}
 
 // Intersection finding to get the
 // region of interest for seeding
@@ -342,7 +478,7 @@ std::vector<SourceLink> createSourceLinks(
 
   Vector3 vertex(-5., 0., 0.);
 //   std::vector<ActsScalar> phis = {-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15};
-  std::vector<ActsScalar> phis = {-0.15, 0.15};
+  std::vector<ActsScalar> phis = {-0.05, 0.05};
 
   std::vector<SourceLink> sourceLinks;
   for (ActsScalar phi : phis) {
@@ -378,7 +514,7 @@ BOOST_AUTO_TEST_CASE(PathSeederZeroField) {
   auto sourceLinks = createSourceLinks(gctx, *detector);
 
   // Prepare the PathSeeder
-  auto pathSeederCfg = Acts::Experimental::PathSeeder<Grid>::Config();
+  auto pathSeederCfg = Acts::Experimental::PathSeeder::Config();
 
   // Grid to bin the source links
   SurfaceAccessor surfaceAccessor{*detector};
@@ -424,70 +560,96 @@ BOOST_AUTO_TEST_CASE(PathSeederZeroField) {
     pathSeederCfg.firstLayerIds.push_back(geoId);
 
   // Create the PathSeeder
-  Acts::Experimental::PathSeeder<Grid> pathSeeder(pathSeederCfg);
+  Acts::Experimental::PathSeeder pathSeeder(pathSeederCfg);
 
   // Get the seeds
-    pathWidthProvider.width = {0.1, 0.1};
+    pathWidthProvider.width = {0.01, 0.01};
 
-  auto seeds = pathSeeder.getSeeds(gctx, sourceLinkGrid);
+    std::vector<Acts::Experimental::PathSeeder::Seed> seeds;
+    // SeedTreeContainer seeds;
+    pathSeeder.getSeeds(gctx, sourceLinkGrid, seeds);
 
     // Check the seeds
-
     BOOST_CHECK_EQUAL(seeds.size(), 2);
 
-    for (auto seed : seeds) {
-        printSeedTree(seed.root);
-        std::cout << "----------------" << std::endl;
+    auto seed = seeds.at(0);
+    TestSourceLinkContainer ckfSourceLinks;
+    for (auto& sl : seed.sourceLinks) {
+        auto ssl = sl.get<detail::Test::TestSourceLink>();
+        ckfSourceLinks.insert({ssl.m_geometryId, ssl});
     }
 
-    for (auto seed : seeds) {
-        TryAllTracks tryAllTracks;
-        tryAllTracks.tryAllTracks(seed.root, {});
+    auto options = makeCkfOptions();
+    options.propagatorPlainOptions.direction = Acts::Direction::Forward;
+    
+    TestSourceLinkAccessor slAccessor;
+    slAccessor.container = &ckfSourceLinks;
+    options.sourcelinkAccessor.connect<&TestSourceLinkAccessor::range>(
+        &slAccessor);
+    
+    TrackContainer tc{
+        Acts::VectorTrackContainer{},
+        Acts::VectorMultiTrajectory{}};
+    
+    // Create IP covariance matrix from
+    // reasonable standard deviations
+    Acts::BoundVector ipStdDev;
+    ipStdDev[Acts::eBoundLoc0] = 100_um;
+    ipStdDev[Acts::eBoundLoc1] = 100_um;
+    ipStdDev[Acts::eBoundTime] = 25_ns;
+    ipStdDev[Acts::eBoundPhi] = 2_degree;
+    ipStdDev[Acts::eBoundTheta] = 2_degree;
+    ipStdDev[Acts::eBoundQOverP] = 1 / 100_GeV;
+    Acts::BoundSquareMatrix ipCov =
+        ipStdDev.cwiseProduct(ipStdDev).asDiagonal();
+
+    // CKF implementation to be tested
+    CombinatorialKalmanFilter ckf(
+        makeConstantFieldPropagator(detector, 0), 
+        Acts::getDefaultLogger("CKF", Acts::Logging::VERBOSE));
+
+    // run the CKF for all initial track states
+    for (std::size_t trackId = 0u;  trackId < 1; ++trackId) {
+        Acts::Vector4 mPos4 = {seed.ipVertex.x(), seed.ipVertex.y(), seed.ipVertex.z(), 0};
+
+        Acts::ActsScalar p = seed.ipP; 
+        Acts::ActsScalar theta = std::acos(seed.ipDir.z()/p);
+        Acts::ActsScalar phi = std::atan2(seed.ipDir.y(), seed.ipDir.x());
+
+        Acts::CurvilinearTrackParameters ipParameters(
+            mPos4, phi, theta,
+            1_e / p, ipCov, 
+            Acts::ParticleHypothesis::electron());
+
+        options.propagatorPlainOptions.maxSteps = 10000;
+
+        auto res = ckf.findTracks(ipParameters, options, tc);
+        if (!res.ok()) {
+            BOOST_TEST_INFO(res.error() << " " << res.error().message());
+        }
+        BOOST_REQUIRE(res.ok());
+
+        std::cout << "Tracks = " << tc.size() << std::endl;
+        std::cout << "\n\n\n" << std::endl;
+        for (std::size_t tid = 0u; tid < tc.size(); ++tid) {
+            const auto track = tc.getTrack(tid);
         
-        std::cout << "Tracks for seed: " << tryAllTracks.tracks.size() << std::endl;
-
-        for (auto& track : tryAllTracks.tracks) {
-            for (auto& node : track) {
-                auto surf = surfaceAccessor(node);
-                auto pars = node.get<detail::Test::TestSourceLink>().parameters;
-                std::cout << "(" << surf->localToGlobal(gctx, pars, Vector3{0, 1, 0}).transpose() << ") -> ";
+            // check purity of first found track
+            // find the number of hits not originating from the right track
+            std::size_t numHits = 0u;
+            std::size_t nummismatchedHits = 0u;
+            for (const auto trackState : track.trackStatesReversed()) {
+                const auto& sl = trackState.getUncalibratedSourceLink();
+                const auto& ssl = sl.get<detail::Test::TestSourceLink>();
+                std::cout << "Track state: " 
+                << trackState.parameters().transpose() << " ----> "
+                << ssl.parameters.transpose()
+                << std::endl;
             }
-            std::cout << std::endl;
+            std::cout << "----------------" << std::endl;
         }
 
-
     }
-
-    std::cout << "\n\n\n ---------------- \n\n\n" << std::endl;
-
-    pathWidthProvider.width = {100, 100};
-
-    seeds = pathSeeder.getSeeds(gctx, sourceLinkGrid);
-
-    // Check the seeds
-    BOOST_CHECK_EQUAL(seeds.size(), 2);
-
-    for (auto seed : seeds) {
-        printSeedTree(seed.root);
-        std::cout << "----------------" << std::endl;
-    }
-
-    for (auto seed : seeds) {
-        TryAllTracks tryAllTracks;
-        tryAllTracks.tryAllTracks(seed.root, {});
-
-        std::cout << "Tracks for seed: " << tryAllTracks.tracks.size() << std::endl;
-
-        for (auto& track : tryAllTracks.tracks) {
-            for (auto& node : track) {
-                auto surf = surfaceAccessor(node);
-                auto pars = node.get<detail::Test::TestSourceLink>().parameters;
-                std::cout << "(" << surf->localToGlobal(gctx, pars, Vector3{0, 1, 0}).transpose() << ") -> ";
-            }
-            std::cout << std::endl;
-        }
-    }
-
 }
 
 BOOST_AUTO_TEST_SUITE_END()
