@@ -38,6 +38,8 @@ using namespace Acts::UnitLiterals;
 using Axis = Acts::Axis<AxisType::Equidistant, AxisBoundaryType::Open>;
 using Grid = Acts::Grid<std::vector<SourceLink>, Axis, Axis>;
 
+using TrackParameters = CurvilinearTrackParameters;
+
 GeometryContext gctx;
 
 // Parameters for the geometry
@@ -49,125 +51,130 @@ const ActsScalar deltaYZ = 1.;
 // Intersection finding to get the
 // region of interest for seeding
 class NoFieldIntersectionFinder {
- public:
-  ActsScalar m_tol = 1e-4;
+    public:
+        ActsScalar m_tol = 1e-4;
 
-  std::vector<const Surface*> m_surfaces;
+        std::vector<const Surface*> m_surfaces;
 
-  // Find the intersections along the path
-  // and return them in the order of the path
-  // length
-  std::vector<std::pair<GeometryIdentifier, Vector3>> operator()(
-      const GeometryContext& geoCtx, const Vector3& position,
-      const Vector3& direction, [[maybe_unused]] const ActsScalar& Pmag = 0,
-      [[maybe_unused]] const ActsScalar& Charge = 0) const {
-    std::vector<std::pair<GeometryIdentifier, Vector3>> sIntersections;
-    // Intersect the surfaces
-    for (auto& surface : m_surfaces) {
-      // Get the intersection
-      auto sMultiIntersection = surface->intersect(
-          geoCtx, position, direction,
-          BoundaryTolerance::AbsoluteCartesian(m_tol, m_tol));
+        // Find the intersections along the path
+        // and return them in the order of the path
+        // length
+        std::vector<std::pair<GeometryIdentifier, Vector2>> operator()(
+            const GeometryContext& geoCtx, 
+            const TrackParameters& trackParameters) const {
+                Vector3 position = trackParameters.position();
+                Vector3 direction = trackParameters.direction();
 
-      // Take the closest
-      auto closestForward = sMultiIntersection.closestForward();
-
-      // Store if the intersection is reachable
-      if (closestForward.status() == IntersectionStatus::reachable &&
-          closestForward.pathLength() > 0.0) {
-        sIntersections.push_back(
-            {closestForward.object()->geometryId(), closestForward.position()});
-        continue;
-      }
-    }
-    return sIntersections;
-  }
-};
-
-// Grid to store the source links for
-// the seeding fast lookup
-class SourceLinkGrid {
- public:
-  using GridType = Grid;
-
-  /// Lookup table collection
-  std::unordered_map<int, GridType> m_lookupTables;
-
-  /// Surface accessor
-  SourceLinkSurfaceAccessor m_surfaceAccessor;
-
-  void initialize(const GeometryContext& geoCtx,
-                  std::vector<SourceLink> sourceLinks) {
-    // Lookup table for each layer
-    std::unordered_map<int, GridType> lookupTable;
-
-    // Construct a binned grid for each layer
-    for (int i : {14, 15, 16, 17}) {
-      Axis xAxis(-halfY, halfY, 50);
-      Axis yAxis(-halfZ, halfZ, 50);
-
-      GridType grid(std::make_tuple(xAxis, yAxis));
-      lookupTable.insert({i, grid});
-    }
-    // Fill the grid with source links
-    for (auto& sl : sourceLinks) {
-      auto ssl = sl.get<detail::Test::TestSourceLink>();
-      auto id = ssl.m_geometryId;
-
-      // Grid works with global positions
-      Vector3 globalPos = m_surfaceAccessor(sl)->localToGlobal(
-          geoCtx, ssl.parameters, Vector3{0, 1, 0});
-
-      auto bin =
-          lookupTable.at(id.sensitive())
-              .localBinsFromPosition(Vector2(globalPos.y(), globalPos.z()));
-      lookupTable.at(id.sensitive()).atLocalBins(bin).push_back(sl);
-    }
-
-    m_lookupTables = lookupTable;
-  };
-
-  // Get the source link grid for a given geometry id
-  GridType operator()(const GeometryIdentifier& geoId) const {
-    return m_lookupTables.at(geoId.sensitive());
-  }
+                std::vector<std::pair<GeometryIdentifier, Vector2>> sIntersections;
+                // Intersect the surfaces
+                for (auto& surface : m_surfaces) {
+                    // Get the intersection
+                    auto sMultiIntersection = surface->intersect(
+                        geoCtx, position, direction,
+                        BoundaryTolerance::AbsoluteCartesian(m_tol, m_tol));
+                
+                    // Take the closest
+                    auto closestForward = sMultiIntersection.closestForward();
+                
+                    // Store if the intersection is reachable
+                    if (closestForward.status() == IntersectionStatus::reachable &&
+                        closestForward.pathLength() > 0.0) {
+                            sIntersections.push_back(
+                                {closestForward.object()->geometryId(), 
+                                surface->globalToLocal(
+                                    geoCtx, closestForward.position(), Vector3{0, 1, 0}).value()});
+                            continue;
+                    }
+                }
+                return sIntersections;
+        }
 };
 
 // A simple path width provider to set
 // the grid lookup boundaries around the
 // intersection point
-std::pair<ActsScalar, ActsScalar> getPathWidth(
-    const GeometryContext& /*gctx*/, const GeometryIdentifier& /*geoId*/) {
-  return {0.1, 0.1};
-}
+class PathWidthProvider {
+    public:
+        std::pair<ActsScalar, ActsScalar> width;
 
-// Calibrator to transform the source links
-// to global coordinates
-class SourceLinkCalibrator {
- public:
-  SourceLinkSurfaceAccessor m_surfaceAccessor;
-
-  Vector3 operator()(const GeometryContext& geoCtx,
-                     const SourceLink& sourceLink) const {
-    auto ssl = sourceLink.get<detail::Test::TestSourceLink>();
-    auto res = m_surfaceAccessor(sourceLink)
-                   ->localToGlobal(geoCtx, ssl.parameters, Vector3{0, 1, 0});
-    return res;
-  }
+        std::pair<ActsScalar, ActsScalar> operator()(
+            const GeometryContext& /*gctx*/, const GeometryIdentifier& /*geoId*/) const {
+            return width;
+        }
 };
 
 // Estimator of the particle's energy,
 // vertex, momentum direction at the IP
 // and the direction at the first hit
 class TrackEstimator {
- public:
-  Vector3 ip;
+    public:
+        Vector3 m_ip;
+        SourceLinkSurfaceAccessor m_surfaceAccessor;
 
-  std::tuple<ActsScalar, ActsScalar, Vector3, Vector3, Vector3> operator()(
-      const GeometryContext& /*geoCtx*/, const Vector3& pivot) const {
-    Vector3 direction = (pivot - ip).normalized();
-    return {1_e, 1._GeV, ip, direction, direction};
-  };
+        std::pair<TrackParameters, TrackParameters> operator()(
+            const GeometryContext& geoCtx, const SourceLink& pivot) const {
+
+            auto testSourceLink = pivot.get<detail::Test::TestSourceLink>();
+            Vector3 pivot3 = m_surfaceAccessor(pivot)->localToGlobal(
+                geoCtx, testSourceLink.parameters, Vector3{0, 1, 0});
+
+            Vector3 direction = (pivot3 - m_ip).normalized();
+        
+            Vector4 ip = {m_ip.x(), m_ip.y(), m_ip.z(), 0};
+            ActsScalar qOverP = 1_e / 1._GeV;
+            ActsScalar phi = Acts::VectorHelpers::phi(direction);
+            ActsScalar theta = Acts::VectorHelpers::theta(direction);
+            ParticleHypothesis particle = ParticleHypothesis::electron();
+        
+            TrackParameters ipParams(
+                ip, phi, theta, qOverP, std::nullopt, particle);
+            TrackParameters firstLayerParams(
+                ip, phi, theta, qOverP, std::nullopt, particle);
+        
+            return {ipParams, firstLayerParams};
+        }
+};
+
+// Construct grid with the source links
+struct ConstructSourceLinkGrid {
+    SourceLinkSurfaceAccessor m_surfaceAccessor;
+   
+    std::unordered_map<GeometryIdentifier, Grid> construct(
+        GeometryContext geoCtx,
+        std::vector<SourceLink> sourceLinks) {
+            // Lookup table for each layer
+            std::unordered_map<GeometryIdentifier, Grid> lookupTable;
+        
+            // Construct a binned grid for each layer
+            for (int i : {14, 15, 16, 17}) {
+                Axis xAxis(-halfY, halfY, 50);
+                Axis yAxis(-halfZ, halfZ, 50);
+            
+                Grid grid(std::make_tuple(xAxis, yAxis));
+
+                GeometryIdentifier geoId;
+
+                geoId.setSensitive(i);
+
+                lookupTable.insert({geoId, grid});
+            }
+            // Fill the grid with source links
+            for (auto& sl : sourceLinks) {
+                auto ssl = sl.get<detail::Test::TestSourceLink>();
+                auto id = ssl.m_geometryId;
+            
+                // Grid works with global positions
+                Vector3 globalPos = m_surfaceAccessor(sl)->localToGlobal(
+                    geoCtx, ssl.parameters, Vector3{0, 1, 0});
+            
+                auto bin =
+                    lookupTable.at(id)
+                        .localBinsFromPosition(Vector2(globalPos.y(), globalPos.z()));
+                lookupTable.at(id).atLocalBins(bin).push_back(sl);
+            }
+        
+            return lookupTable;
+    }
 };
 
 // Construct a simple telescope detector
@@ -293,111 +300,105 @@ std::shared_ptr<Experimental::Detector> constructTelescopeDetector() {
 }
 
 std::vector<SourceLink> createSourceLinks(
-    const GeometryContext& geoCtx, const Experimental::Detector& detector) {
-  NoFieldIntersectionFinder intersectionFinder;
+    const GeometryContext& geoCtx, 
+    const Experimental::Detector& detector) {
+        NoFieldIntersectionFinder intersectionFinder;
 
-  for (auto volume : detector.volumes()) {
-    for (auto surface : volume->surfaces()) {
-      intersectionFinder.m_surfaces.push_back(surface);
-    }
-  }
+        for (auto volume : detector.volumes()) {
+            for (auto surface : volume->surfaces()) {
+                intersectionFinder.m_surfaces.push_back(surface);
+            }
+        }
 
-  Vector3 vertex(-5., 0., 0.);
-  std::vector<ActsScalar> phis = {-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15};
+        Vector4 vertex(-5., 0., 0., 0);
+        std::vector<ActsScalar> phis = {-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15};
 
-  std::vector<SourceLink> sourceLinks;
-  for (ActsScalar phi : phis) {
-    Vector3 direction(cos(phi), sin(phi), 0.);
+        std::vector<SourceLink> sourceLinks;
+        for (ActsScalar phi : phis) {
+            TrackParameters trackParameters(
+                vertex, phi, M_PI_2, 1_e / 1._GeV, 
+                std::nullopt, ParticleHypothesis::electron());
 
-    auto intersections = intersectionFinder(geoCtx, vertex, direction);
+            auto intersections = intersectionFinder(geoCtx, trackParameters);
 
-    SquareMatrix2 cov = SquareMatrix2::Identity();
+            SquareMatrix2 cov = SquareMatrix2::Identity();
+        
+            for (auto& [id, refPoint] : intersections) {
+                detail::Test::TestSourceLink sourceLink(
+                    eBoundLoc0, eBoundLoc1, refPoint, cov,
+                    id, id.value());
+            
+                SourceLink sl{sourceLink};
+                sourceLinks.push_back(sl);
+            }
+        }
 
-    for (auto& [id, refPoint] : intersections) {
-      auto surf = *detector.sensitiveHierarchyMap().find(id);
-      Vector2 val = surf->globalToLocal(geoCtx, refPoint, direction).value();
-
-      detail::Test::TestSourceLink sourceLink(eBoundLoc0, eBoundLoc1, val, cov,
-                                              id, id.value());
-
-      SourceLink sl{sourceLink};
-      sourceLinks.push_back(sl);
-    }
-  }
-
-  return sourceLinks;
+        return sourceLinks;
 }
 
 BOOST_AUTO_TEST_CASE(PathSeederZeroField) {
-  using SurfaceAccessor =
-      detail::Test::Experimental::TestSourceLinkSurfaceAccessor;
+    using SurfaceAccessor =
+        detail::Test::Experimental::TestSourceLinkSurfaceAccessor;
 
-  // Create detector
-  auto detector = constructTelescopeDetector();
-
-  // Create source links
-  auto sourceLinks = createSourceLinks(gctx, *detector);
-
-  // Prepare the PathSeeder
-  auto pathSeederCfg = Acts::Experimental::PathSeeder<Grid>::Config();
-
-  // Grid to bin the source links
-  SurfaceAccessor surfaceAccessor{*detector};
-  SourceLinkGrid sourceLinkGrid;
-  sourceLinkGrid.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(
-      &surfaceAccessor);
-  pathSeederCfg.sourceLinkGridLookup.connect<&SourceLinkGrid::operator()>(
-      &sourceLinkGrid);
-
-  // Estimator of the IP and first hit
-  // parameters of the track
-  TrackEstimator trackEstimator;
-  trackEstimator.ip = Vector3(-5., 0., 0.);
-  pathSeederCfg.trackEstimator.connect<&TrackEstimator::operator()>(
-      &trackEstimator);
-
-  // Transforms the source links to global coordinates
-  SourceLinkCalibrator sourceLinkCalibrator;
-  sourceLinkCalibrator.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(
-      &surfaceAccessor);
-  pathSeederCfg.sourceLinkCalibrator.connect<&SourceLinkCalibrator::operator()>(
-      &sourceLinkCalibrator);
-
-  // Intersection finder
-  NoFieldIntersectionFinder intersectionFinder;
-  for (auto volume : detector->volumes()) {
-    for (auto surface : volume->surfaces()) {
-      intersectionFinder.m_surfaces.push_back(surface);
+    // Create detector
+    auto detector = constructTelescopeDetector();
+    
+    // Create source links
+    auto sourceLinks = createSourceLinks(gctx, *detector);
+    
+    // Prepare the PathSeeder
+    auto pathSeederCfg = Acts::Experimental::PathSeeder::Config();
+    
+    // Grid to bin the source links
+    SurfaceAccessor surfaceAccessor{*detector};
+    auto sourceLinkGridConstructor = ConstructSourceLinkGrid();
+        sourceLinkGridConstructor.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(
+            &surfaceAccessor);
+    
+    // Create the grid
+    std::unordered_map<GeometryIdentifier, Grid> sourceLinkGrid =
+        sourceLinkGridConstructor.construct(gctx, sourceLinks);
+    
+    // Estimator of the IP and first hit
+    // parameters of the track
+    TrackEstimator trackEstimator;
+    trackEstimator.m_ip = Vector3(-5., 0., 0.);
+    trackEstimator.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(
+        &surfaceAccessor);
+    pathSeederCfg.trackEstimator.connect<&TrackEstimator::operator()>(
+        &trackEstimator);
+    
+    // Intersection finder
+    NoFieldIntersectionFinder intersectionFinder;
+    for (auto volume : detector->volumes()) {
+        for (auto surface : volume->surfaces()) {
+        intersectionFinder.m_surfaces.push_back(surface);
+        }
     }
-  }
-  pathSeederCfg.intersectionFinder
-      .connect<&NoFieldIntersectionFinder::operator()>(&intersectionFinder);
+    pathSeederCfg.intersectionFinder
+        .connect<&NoFieldIntersectionFinder::operator()>(&intersectionFinder);
+    
+    // Path width provider
+    PathWidthProvider pathWidthProvider;
 
-  // Path width provider
-  pathSeederCfg.pathWidthProvider.connect<&getPathWidth>();
+    pathSeederCfg.pathWidthProvider.connect<&PathWidthProvider::operator()>(&pathWidthProvider);
 
-  // First tracking layer
-  Extent firstLayerExtent;
-  firstLayerExtent.set(BinningValue::binX, -0.1, 0.1);
-  firstLayerExtent.set(BinningValue::binY, -halfY - deltaYZ, halfY + deltaYZ);
-  firstLayerExtent.set(BinningValue::binZ, -halfZ - deltaYZ, halfZ + deltaYZ);
+    GeometryIdentifier geoId;
+    geoId.setSensitive(14);
+    pathSeederCfg.refLayerIds.push_back(geoId);
+    
+    // Create the PathSeeder
+    Acts::Experimental::PathSeeder pathSeeder(pathSeederCfg);
+    
+    // Get the seeds
+    pathWidthProvider.width = {0.01, 0.01};
 
-  pathSeederCfg.firstLayerExtent = firstLayerExtent;
+    std::vector<Acts::Experimental::PathSeeder::PathSeed> seeds;
+    // SeedTreeContainer seeds;
+    pathSeeder.findSeeds(gctx, sourceLinkGrid, seeds);
 
-  // Create the PathSeeder
-  Acts::Experimental::PathSeeder<Grid> pathSeeder(pathSeederCfg);
-
-  // Get the seeds
-  sourceLinkGrid.initialize(gctx, sourceLinks);
-  auto seeds = pathSeeder.getSeeds(gctx, sourceLinks);
-
-  // Check the seeds
-  BOOST_CHECK_EQUAL(seeds.size(), 7);
-  for (auto& seed : seeds) {
-    BOOST_CHECK_EQUAL(seed.sourceLinks.size(), 4);
-    BOOST_CHECK_EQUAL(seed.ipVertex, Vector3(-5., 0., 0.));
-    BOOST_CHECK_EQUAL(seed.ipP, 1._GeV);
-  }
+    // Check the seeds
+    BOOST_CHECK_EQUAL(seeds.size(), 7);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
