@@ -123,10 +123,6 @@ class PathSeeder {
             std::vector<GeometryIdentifier> firstLayerIds;
             /// Direction of the telescope extent
             BinningValue orientation = BinningValue::binX;
-
-            /// Energy cut for the tracks
-            ActsScalar minE;
-            ActsScalar maxE;
         };
 
         /// @brief Constructor
@@ -173,10 +169,6 @@ class PathSeeder {
                             // Get the IP parameters
                             auto [q, ipP, ipVertex, ipDir, flDir] =
                                 m_cfg.trackEstimator(gctx, globalPos);
-
-                            if (ipP < m_cfg.minE || ipP > m_cfg.maxE) {
-                                continue;
-                            }
 
                             // Intersect with the surfaces
                             std::vector<std::pair<GeometryIdentifier, Vector3>> intersections =
