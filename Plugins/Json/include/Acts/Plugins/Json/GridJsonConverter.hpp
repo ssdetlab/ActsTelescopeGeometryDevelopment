@@ -276,6 +276,7 @@ auto fromJson(const nlohmann::json& jGrid,
     for (const auto& jd : jData) {
       std::array<std::size_t, 2u> lbin = jd[0u];
       if (!jd[1u].is_null()) {
+        std::cout << "lbin: " << lbin[0u] << " " << lbin[1u] << std::endl;
         grid.atLocalBins(lbin) = jd[1u].get<value_type>();
       }
     }

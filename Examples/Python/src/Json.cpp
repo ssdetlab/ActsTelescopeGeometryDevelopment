@@ -19,6 +19,8 @@
 #include "ActsExamples/Io/Json/JsonMaterialWriter.hpp"
 #include "ActsExamples/Io/Json/JsonSurfacesReader.hpp"
 #include "ActsExamples/Io/Json/JsonSurfacesWriter.hpp"
+#include "ActsExamples/Io/Json/JsonTrackLookupGridWriter.hpp"
+#include "ActsExamples/Io/Json/JsonTrackLookupGridReader.hpp"
 
 #include <fstream>
 #include <initializer_list>
@@ -37,7 +39,13 @@ class IMaterialDecorator;
 namespace ActsExamples {
 class IMaterialWriter;
 class IWriter;
+
+namespace Experimental {
+    class ITrackLookupGridWriter;
+}  // namespace Experimental
+
 }  // namespace ActsExamples
+
 
 namespace py = pybind11;
 using namespace pybind11::literals;
@@ -108,6 +116,57 @@ void addJson(Context& ctx) {
     ACTS_PYTHON_MEMBER(converterCfg);
     ACTS_PYTHON_MEMBER(fileName);
     ACTS_PYTHON_MEMBER(writeFormat);
+    ACTS_PYTHON_STRUCT_END();
+  }
+
+  {
+    using IWriter = ActsExamples::Experimental::ITrackLookupGridWriter;
+    using Writer = ActsExamples::Experimental::JsonTrackLookupGridWriter;
+    using Config = Writer::Config;
+
+    auto cls =
+        py::class_<Writer, IWriter, std::shared_ptr<Writer>>(
+            mex, "JsonTrackLookupGridWriter")
+            .def(py::init<const Config&>(), py::arg("config"))
+            .def("writeLookup", &Writer::writeLookup)
+            .def_property_readonly("config", &Writer::config);
+
+    auto c =
+        py::class_<Config>(cls, "Config")
+            .def(py::init<>())
+            .def(py::init<const std::string&>(), py::arg("path"));
+
+    ACTS_PYTHON_STRUCT_BEGIN(c, Config);
+    ACTS_PYTHON_MEMBER(path);
+    ACTS_PYTHON_MEMBER(writeFormat);
+    ACTS_PYTHON_STRUCT_END();
+  }
+
+  {
+    using IReader = ActsExamples::Experimental::ITrackLookupGridReader;
+    using Reader = ActsExamples::Experimental::JsonTrackLookupGridReader;
+    using Config = Reader::Config;
+
+    auto cls =
+        py::class_<Reader, IReader, std::shared_ptr<Reader>>(
+            mex, "JsonTrackLookupGridReader")
+            .def(py::init<const Config&>(), py::arg("config"))
+            .def("readLookup", &Reader::readLookup)
+            .def_property_readonly("config", &Reader::config);
+
+    auto c =
+        py::class_<Config>(cls, "Config")
+            .def(py::init<>())
+            .def(py::init<
+                std::pair<std::size_t, std::size_t>,
+                std::pair<Acts::ActsScalar, Acts::ActsScalar>,
+                std::pair<Acts::ActsScalar, Acts::ActsScalar>>(),
+                py::arg("bins"), py::arg("xBounds"), py::arg("yBounds"));
+                
+    ACTS_PYTHON_STRUCT_BEGIN(c, Config);
+    ACTS_PYTHON_MEMBER(bins);
+    ACTS_PYTHON_MEMBER(xBounds);
+    ACTS_PYTHON_MEMBER(yBounds);
     ACTS_PYTHON_STRUCT_END();
   }
 

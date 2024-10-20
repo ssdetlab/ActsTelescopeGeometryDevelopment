@@ -49,6 +49,8 @@
 #include "ActsExamples/MaterialMapping/IMaterialWriter.hpp"
 #include "ActsExamples/Plugins/Obj/ObjPropagationStepsWriter.hpp"
 #include "ActsExamples/Plugins/Obj/ObjTrackingGeometryWriter.hpp"
+#include "ActsExamples/TrackFinding/ITrackLookupGridWriter.hpp"
+#include "ActsExamples/TrackFinding/ITrackLookupGridReader.hpp"
 
 #include <array>
 #include <memory>
@@ -286,6 +288,16 @@ void addOutput(Context& ctx) {
     ACTS_PYTHON_MEMBER(surfaceByIdentifier);
     ACTS_PYTHON_STRUCT_END();
   }
+
+  py::class_<
+    ActsExamples::Experimental::ITrackLookupGridWriter, 
+    std::shared_ptr<ActsExamples::Experimental::ITrackLookupGridWriter>>(
+        mex, "ITrackLookupGridWriter");
+
+  py::class_<
+    ActsExamples::Experimental::ITrackLookupGridReader, 
+    std::shared_ptr<ActsExamples::Experimental::ITrackLookupGridReader>>(
+        mex, "ITrackLookupGridReader");
 
   py::class_<IMaterialWriter, std::shared_ptr<IMaterialWriter>>(
       mex, "IMaterialWriter");

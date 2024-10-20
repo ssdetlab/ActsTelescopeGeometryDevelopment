@@ -121,11 +121,18 @@ struct adl_serializer<parameters_t> {
     std::array<Acts::ActsScalar, 4> posData = j.at("position");
     Acts::Vector4 position(posData[0], posData[1], posData[2], posData[3]);
 
+    std::cout << "position: " << position.transpose() << std::endl;
+
     std::array<Acts::ActsScalar, 3> dirData = j.at("direction");
     Acts::Vector3 direction(dirData[0], dirData[1], dirData[2]);
 
+    std::cout << "direction: " << direction.transpose() << std::endl;
+
     Acts::ActsScalar qOverP = j.at("qOverP");
     Acts::PdgParticle absPdg = j.at("particleHypothesis");
+
+    std::cout << "qOverP: " << qOverP << std::endl;
+    std::cout << "particleHypothesis: " << absPdg << std::endl;
 
     // Covariance is optional
     std::optional<CovarianceMatrix> cov;
@@ -145,6 +152,8 @@ struct adl_serializer<parameters_t> {
       cov.emplace(std::move(mat));
     }
 
+    std::cout << "covariance: " << cov.has_value() << std::endl;
+
     // Create particle hypothesis
     typename parameters_t::ParticleHypothesis particle(absPdg);
 
@@ -154,6 +163,7 @@ struct adl_serializer<parameters_t> {
     // behind a factory method
     if constexpr (IsGenericBound<parameters_t>) {
       Acts::GeometryContext gctx;
+      std::cout << "TRYING REFERENCE SURFACE" << std::endl;
       auto referenceSurface =
           Acts::SurfaceJsonConverter::fromJson(j.at("referenceSurface"));
 
@@ -165,6 +175,7 @@ struct adl_serializer<parameters_t> {
       }
       return res.value();
     } else {
+      std::cout << "RETURN" << std::endl;
       return parameters_t(position, direction, qOverP, cov, particle);
     }
   }
@@ -190,6 +201,10 @@ struct adl_serializer<std::shared_ptr<parameters_t>> {
   }
 
   static std::shared_ptr<parameters_t> from_json(const nlohmann::json& j) {
+    if (j.is_null()) {
+        std::cout << "IS NULL" << std::endl;
+      return nullptr;
+    }
     return std::make_shared<parameters_t>(j.get<parameters_t>());
   }
 };
@@ -214,6 +229,10 @@ struct adl_serializer<std::unique_ptr<parameters_t>> {
   }
 
   static std::unique_ptr<parameters_t> from_json(const nlohmann::json& j) {
+    if (j.is_null()) {
+        std::cout << "IS NULL" << std::endl;
+      return nullptr;
+    }
     return std::make_unique<parameters_t>(j.get<parameters_t>());
   }
 };

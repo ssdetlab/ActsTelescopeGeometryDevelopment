@@ -21,6 +21,9 @@ auto ActsExamples::Telescope::TelescopeDetector::finalize(
     /*mdecorator*/) -> std::pair<TrackingGeometryPtr, ContextDecorators> {
   DetectorElement::ContextType nominalContext;
 
+    std::cout << "TelescopeDetector::finalize" << std::endl;
+    std::cout << "SURFACE TYPE: " << cfg.surfaceType << std::endl;
+
   if (cfg.surfaceType > 1) {
     throw std::invalid_argument(
         "The surface type could either be 0 for plane surface or 1 for disc "
@@ -43,6 +46,8 @@ auto ActsExamples::Telescope::TelescopeDetector::finalize(
 
   config = cfg;
 
+    std::cout << "POSITIONS: " << cfg.positions.size() << std::endl;
+
   // Sort the provided distances
   std::vector<double> positions = cfg.positions;
   std::vector<double> stereos = cfg.stereos;
@@ -53,10 +58,22 @@ auto ActsExamples::Telescope::TelescopeDetector::finalize(
       nominalContext, detectorStore, positions, stereos, cfg.offsets,
       cfg.bounds, cfg.thickness,
       static_cast<ActsExamples::Telescope::TelescopeSurfaceType>(
-          cfg.surfaceType),
+          0),
       static_cast<Acts::BinningValue>(cfg.binValue));
+    std::cout << "RETURNING TELESCOPE DETECTOR" << std::endl;
   ContextDecorators gContextDecorators = {};
   // return the pair of geometry and empty decorators
+
+    for (auto& [id,surf] : gGeometry->geoIdSurfaceMap()) {
+        std::cout << "SURFACE ID: " << id << std::endl;
+        std::cout << "CENTER: " << 
+            surf->center(Acts::GeometryContext()).transpose() << std::endl;
+        std::cout << "NORMAL: " << 
+            surf->normal(Acts::GeometryContext(), 
+            surf->center(Acts::GeometryContext()), Acts::Vector3(0,0,1)).transpose() << std::endl;
+        std::cout << "TYPE: " << surf->type() << std::endl;
+    }
+
   return std::make_pair<TrackingGeometryPtr, ContextDecorators>(
       std::move(gGeometry), std::move(gContextDecorators));
 }

@@ -28,6 +28,8 @@
 #include "ActsExamples/TrackFinding/SpacePointMaker.hpp"
 #include "ActsExamples/TrackFinding/TrackFindingAlgorithm.hpp"
 #include "ActsExamples/TrackFinding/TrackParamsEstimationAlgorithm.hpp"
+#include "ActsExamples/TrackFinding/SimTrackParamsEstimationAlgorithm.hpp"
+#include "ActsExamples/TrackFinding/TrackLookupGridProvider.hpp"
 
 #include <array>
 #include <cstddef>
@@ -292,6 +294,66 @@ void addTrackFinding(Context& ctx) {
       outputTrackParameters, outputSeeds, outputProtoTracks, trackingGeometry,
       magneticField, bFieldMin, initialSigmas, initialSigmaPtRel,
       initialVarInflation, noTimeVarInflation, particleHypothesis);
+
+    ACTS_PYTHON_DECLARE_ALGORITHM(
+        ActsExamples::Experimental::TrackLookupEstimationAlgorithm, mex,
+        "TrackLookupEstimationAlgorithm", refLayers, inputHits, inputParticles,
+        outputIPTrackParameters, outputRefLayerTrackParameters, 
+        trackLookupGridAccumulator, trackLookupGridWriters);
+
+    ACTS_PYTHON_DECLARE_ALGORITHM(
+        ActsExamples::Experimental::DummyGridTest, mex,
+        "DummyGridTest", refLayer, lookup, inputHits, inputParticles);
+
+  {
+    using Alg = ActsExamples::Experimental::TrackLookupGridAccumulator;
+    using Config = Alg::Config;
+
+    auto alg =
+        py::class_<Alg, std::shared_ptr<Alg>>(
+            mex, "TrackLookupGridAccumulator")
+            .def(py::init<const Config&>(),
+                 py::arg("config"))
+            .def_property_readonly("config", &Alg::config);
+
+    auto c = py::class_<Config>(alg, "Config")
+        .def(py::init<>())
+        .def(py::init<
+            std::pair<std::size_t, std::size_t>,
+            std::pair<Acts::ActsScalar, Acts::ActsScalar>,
+            std::pair<Acts::ActsScalar, Acts::ActsScalar>>(),
+            py::arg("bins"), py::arg("xBounds"), py::arg("yBounds"));
+    ACTS_PYTHON_STRUCT_BEGIN(c, Config);
+    ACTS_PYTHON_MEMBER(bins);
+    ACTS_PYTHON_MEMBER(xBounds);
+    ACTS_PYTHON_MEMBER(yBounds);
+    ACTS_PYTHON_STRUCT_END();
+  }
+  {
+    using Alg = ActsExamples::Experimental::TrackLookupGridProvider;
+    using Config = Alg::Config;
+
+    auto alg =
+        py::class_<Alg, std::shared_ptr<Alg>>(
+            mex, "TrackLookupGridProvider")
+            .def(py::init<const Config&>(),
+                 py::arg("config"))
+            .def_property_readonly("config", &Alg::config);
+
+    auto c = py::class_<Config>(alg, "Config")
+        .def(py::init<>())
+        .def(py::init<
+            std::shared_ptr<ActsExamples::Experimental::ITrackLookupGridReader>,
+            const std::string&, 
+            const std::string&>(),
+            py::arg("reader"), py::arg("ipLookupGridPath"), py::arg("refLookupGridPath"));
+    ACTS_PYTHON_STRUCT_BEGIN(c, Config);
+    ACTS_PYTHON_MEMBER(trackLookupGridReader);
+    ACTS_PYTHON_MEMBER(ipLookupGridPath);
+    ACTS_PYTHON_MEMBER(refLookupGridPath);
+    ACTS_PYTHON_STRUCT_END();
+  }
+
 
   {
     using Alg = ActsExamples::TrackFindingAlgorithm;
