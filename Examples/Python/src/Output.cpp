@@ -46,11 +46,12 @@
 #include "ActsExamples/Io/Root/RootTrackStatesWriter.hpp"
 #include "ActsExamples/Io/Root/RootTrackSummaryWriter.hpp"
 #include "ActsExamples/Io/Root/RootVertexWriter.hpp"
+#include "ActsExamples/Io/Root/RootTrackParamsValidationWriter.hpp"
 #include "ActsExamples/MaterialMapping/IMaterialWriter.hpp"
 #include "ActsExamples/Plugins/Obj/ObjPropagationStepsWriter.hpp"
 #include "ActsExamples/Plugins/Obj/ObjTrackingGeometryWriter.hpp"
-#include "ActsExamples/TrackFinding/ITrackLookupGridWriter.hpp"
-#include "ActsExamples/TrackFinding/ITrackLookupGridReader.hpp"
+#include "ActsExamples/TrackFinding/ITrackParamsLookupWriter.hpp"
+#include "ActsExamples/TrackFinding/ITrackParamsLookupReader.hpp"
 
 #include <array>
 #include <memory>
@@ -214,6 +215,12 @@ void addOutput(Context& ctx) {
                              filePath, resPlotToolConfig, effPlotToolConfig,
                              trackSummaryPlotToolConfig);
 
+  ACTS_PYTHON_DECLARE_WRITER(ActsExamples::RootTrackParamsValidationWriter, mex,
+                            "RootTrackParamsValidationWriter", 
+                            inputIpPars, inputRefLayerPars,
+                            inputIpParsEst, inputRefLayerParsEst,
+                            path, treeName);
+
   ACTS_PYTHON_DECLARE_WRITER(
       ActsExamples::SeedingPerformanceWriter, mex, "SeedingPerformanceWriter",
       inputSeeds, inputMeasurementParticlesMap, inputParticles, filePath,
@@ -290,14 +297,14 @@ void addOutput(Context& ctx) {
   }
 
   py::class_<
-    ActsExamples::Experimental::ITrackLookupGridWriter, 
-    std::shared_ptr<ActsExamples::Experimental::ITrackLookupGridWriter>>(
-        mex, "ITrackLookupGridWriter");
+    ActsExamples::ITrackParamsLookupWriter, 
+    std::shared_ptr<ActsExamples::ITrackParamsLookupWriter>>(
+        mex, "ITrackParamsLookupWriter");
 
   py::class_<
-    ActsExamples::Experimental::ITrackLookupGridReader, 
-    std::shared_ptr<ActsExamples::Experimental::ITrackLookupGridReader>>(
-        mex, "ITrackLookupGridReader");
+    ActsExamples::ITrackParamsLookupReader, 
+    std::shared_ptr<ActsExamples::ITrackParamsLookupReader>>(
+        mex, "ITrackParamsLookupReader");
 
   py::class_<IMaterialWriter, std::shared_ptr<IMaterialWriter>>(
       mex, "IMaterialWriter");

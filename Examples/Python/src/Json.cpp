@@ -19,8 +19,8 @@
 #include "ActsExamples/Io/Json/JsonMaterialWriter.hpp"
 #include "ActsExamples/Io/Json/JsonSurfacesReader.hpp"
 #include "ActsExamples/Io/Json/JsonSurfacesWriter.hpp"
-#include "ActsExamples/Io/Json/JsonTrackLookupGridWriter.hpp"
-#include "ActsExamples/Io/Json/JsonTrackLookupGridReader.hpp"
+#include "ActsExamples/Io/Json/JsonTrackParamsLookupWriter.hpp"
+#include "ActsExamples/Io/Json/JsonTrackParamsLookupReader.hpp"
 
 #include <fstream>
 #include <initializer_list>
@@ -41,7 +41,7 @@ class IMaterialWriter;
 class IWriter;
 
 namespace Experimental {
-    class ITrackLookupGridWriter;
+    class ITrackParamsLookupWriter;
 }  // namespace Experimental
 
 }  // namespace ActsExamples
@@ -120,13 +120,13 @@ void addJson(Context& ctx) {
   }
 
   {
-    using IWriter = ActsExamples::Experimental::ITrackLookupGridWriter;
-    using Writer = ActsExamples::Experimental::JsonTrackLookupGridWriter;
+    using IWriter = ActsExamples::ITrackParamsLookupWriter;
+    using Writer = ActsExamples::JsonTrackParamsLookupWriter;
     using Config = Writer::Config;
 
     auto cls =
         py::class_<Writer, IWriter, std::shared_ptr<Writer>>(
-            mex, "JsonTrackLookupGridWriter")
+            mex, "JsonTrackParamsLookupWriter")
             .def(py::init<const Config&>(), py::arg("config"))
             .def("writeLookup", &Writer::writeLookup)
             .def_property_readonly("config", &Writer::config);
@@ -138,18 +138,17 @@ void addJson(Context& ctx) {
 
     ACTS_PYTHON_STRUCT_BEGIN(c, Config);
     ACTS_PYTHON_MEMBER(path);
-    ACTS_PYTHON_MEMBER(writeFormat);
     ACTS_PYTHON_STRUCT_END();
   }
 
   {
-    using IReader = ActsExamples::Experimental::ITrackLookupGridReader;
-    using Reader = ActsExamples::Experimental::JsonTrackLookupGridReader;
+    using IReader = ActsExamples::ITrackParamsLookupReader;
+    using Reader = ActsExamples::JsonTrackParamsLookupReader;
     using Config = Reader::Config;
 
     auto cls =
         py::class_<Reader, IReader, std::shared_ptr<Reader>>(
-            mex, "JsonTrackLookupGridReader")
+            mex, "JsonTrackParamsLookupReader")
             .def(py::init<const Config&>(), py::arg("config"))
             .def("readLookup", &Reader::readLookup)
             .def_property_readonly("config", &Reader::config);
@@ -158,15 +157,15 @@ void addJson(Context& ctx) {
         py::class_<Config>(cls, "Config")
             .def(py::init<>())
             .def(py::init<
-                std::pair<std::size_t, std::size_t>,
-                std::pair<Acts::ActsScalar, Acts::ActsScalar>,
+                std::unordered_map<
+                    Acts::GeometryIdentifier, 
+                    const Acts::Surface*>,
                 std::pair<Acts::ActsScalar, Acts::ActsScalar>>(),
-                py::arg("bins"), py::arg("xBounds"), py::arg("yBounds"));
+                py::arg("refLayers"), py::arg("bins"));
                 
     ACTS_PYTHON_STRUCT_BEGIN(c, Config);
+    ACTS_PYTHON_MEMBER(refLayers);
     ACTS_PYTHON_MEMBER(bins);
-    ACTS_PYTHON_MEMBER(xBounds);
-    ACTS_PYTHON_MEMBER(yBounds);
     ACTS_PYTHON_STRUCT_END();
   }
 
