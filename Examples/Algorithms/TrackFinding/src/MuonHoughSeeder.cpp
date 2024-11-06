@@ -146,98 +146,98 @@ ActsExamples::ProcessCode ActsExamples::MuonHoughSeeder::execute(
                                      effectiveLayer, 1.0);
       }
     }
-    // now get the peaks
-    auto maxima = peakFinder.findPeaks(houghPlane, axisRanges);
+    // // now get the peaks
+    // auto maxima = peakFinder.findPeaks(houghPlane, axisRanges);
 
-    // visualisation in ROOT
-    // represent the hough space as a TH2
-    TH2D houghHistoForPlot("houghHist", "HoughPlane;tan(#theta);z0 [mm]",
-                           houghPlane.nBinsX(), axisRanges.xMin,
-                           axisRanges.xMax, houghPlane.nBinsY(),
-                           axisRanges.yMin, axisRanges.yMax);
-    for (int bx = 0; bx < houghHistoForPlot.GetNbinsX(); ++bx) {
-      for (int by = 0; by < houghHistoForPlot.GetNbinsY(); ++by) {
-        houghHistoForPlot.SetBinContent(bx + 1, by + 1,
-                                        houghPlane.nHits(bx, by));
-      }
-    }
-    m_outCanvas->SetTitle(Form("Station %s, Eta %i, Phi %i",
-                               stationDict.at(detailedInfo.stationName).c_str(),
-                               static_cast<int>(detailedInfo.stationEta),
-                               static_cast<int>(detailedInfo.stationPhi)));
-    houghHistoForPlot.SetTitle(
-        Form("Station %s, Eta %i, Phi %i",
-             stationDict.at(detailedInfo.stationName).c_str(),
-             static_cast<int>(detailedInfo.stationEta),
-             static_cast<int>(detailedInfo.stationPhi)));
-    m_outCanvas->cd();
-    int maxHitsAsInt = static_cast<int>(houghPlane.maxHits());
-    houghHistoForPlot.SetContour(maxHitsAsInt + 1);
-    for (int k = 0; k < maxHitsAsInt + 1; ++k) {
-      houghHistoForPlot.SetContourLevel(k, k - 0.5);
-    }
-    std::vector<std::unique_ptr<TMarker>> markers;
-    std::vector<std::unique_ptr<TBox>> boxes;
-    houghHistoForPlot.SetContourLevel(maxHitsAsInt + 1,
-                                      houghHistoForPlot.GetMaximum() + 0.5);
-    houghHistoForPlot.Draw("COLZ");
-    // mark the true parameters
-    auto trueMarker = std::make_unique<TMarker>(
-        truePatterns.back().first, truePatterns.back().second, kOpenCrossX);
-    trueMarker->SetMarkerSize(3);
-    trueMarker->SetMarkerColor(kRed);
-    trueMarker->Draw();
+    // // visualisation in ROOT
+    // // represent the hough space as a TH2
+    // TH2D houghHistoForPlot("houghHist", "HoughPlane;tan(#theta);z0 [mm]",
+                        //    houghPlane.nBinsX(), axisRanges.xMin,
+                        //    axisRanges.xMax, houghPlane.nBinsY(),
+                        //    axisRanges.yMin, axisRanges.yMax);
+    // for (int bx = 0; bx < houghHistoForPlot.GetNbinsX(); ++bx) {
+    //   for (int by = 0; by < houghHistoForPlot.GetNbinsY(); ++by) {
+        // houghHistoForPlot.SetBinContent(bx + 1, by + 1,
+                                        // houghPlane.nHits(bx, by));
+    //   }
+    // }
+    // // m_outCanvas->SetTitle(Form("Station %s, Eta %i, Phi %i",
+                            // //    stationDict.at(detailedInfo.stationName).c_str(),
+                            // //    static_cast<int>(detailedInfo.stationEta),
+                            // //    static_cast<int>(detailedInfo.stationPhi)));
+    // houghHistoForPlot.SetTitle(
+        // Form("Station %s, Eta %i, Phi %i",
+            //  stationDict.at(detailedInfo.stationName).c_str(),
+            //  static_cast<int>(detailedInfo.stationEta),
+            //  static_cast<int>(detailedInfo.stationPhi)));
+    // // m_outCanvas->cd();
+    // int maxHitsAsInt = static_cast<int>(houghPlane.maxHits());
+    // houghHistoForPlot.SetContour(maxHitsAsInt + 1);
+    // for (int k = 0; k < maxHitsAsInt + 1; ++k) {
+    //   houghHistoForPlot.SetContourLevel(k, k - 0.5);
+    // }
+    // std::vector<std::unique_ptr<TMarker>> markers;
+    // std::vector<std::unique_ptr<TBox>> boxes;
+    // houghHistoForPlot.SetContourLevel(maxHitsAsInt + 1,
+                                    //   houghHistoForPlot.GetMaximum() + 0.5);
+    // houghHistoForPlot.Draw("COLZ");
+    // // mark the true parameters
+    // auto trueMarker = std::make_unique<TMarker>(
+        // truePatterns.back().first, truePatterns.back().second, kOpenCrossX);
+    // trueMarker->SetMarkerSize(3);
+    // trueMarker->SetMarkerColor(kRed);
+    // trueMarker->Draw();
 
-    // now draw the hough maxima
-    for (auto& max : maxima) {
-      markers.push_back(std::make_unique<TMarker>(max.x, max.y, kFullSquare));
-      markers.back()->SetMarkerSize(1);
-      markers.back()->SetMarkerColor(kBlue);
-      markers.back()->Draw();
-      boxes.push_back(std::make_unique<TBox>(max.x - max.wx, max.y - max.wy,
-                                             max.x + max.wx, max.y + max.wy));
-      boxes.back()->SetLineColor(kBlue);
-      boxes.back()->SetFillStyle(1001);
-      boxes.back()->SetFillColorAlpha(kBlue, 0.1);
-      boxes.back()->SetLineWidth(0);
-      boxes.back()->Draw();
-    }
-    TLegend legend(0.5, 0.7, 1. - gPad->GetRightMargin(),
-                   1. - gPad->GetTopMargin());
-    legend.AddEntry(trueMarker.get(), "True coordinates");
-    legend.SetBorderSize(0);
-    legend.SetFillStyle(0);
-    legend.Draw();
+    // // now draw the hough maxima
+    // for (auto& max : maxima) {
+    //   markers.push_back(std::make_unique<TMarker>(max.x, max.y, kFullSquare));
+    //   markers.back()->SetMarkerSize(1);
+    //   markers.back()->SetMarkerColor(kBlue);
+    //   markers.back()->Draw();
+    //   boxes.push_back(std::make_unique<TBox>(max.x - max.wx, max.y - max.wy,
+                                            //  max.x + max.wx, max.y + max.wy));
+    //   boxes.back()->SetLineColor(kBlue);
+    //   boxes.back()->SetFillStyle(1001);
+    //   boxes.back()->SetFillColorAlpha(kBlue, 0.1);
+    //   boxes.back()->SetLineWidth(0);
+    //   boxes.back()->Draw();
+    // }
+    // TLegend legend(0.5, 0.7, 1. - gPad->GetRightMargin(),
+                //    1. - gPad->GetTopMargin());
+    // legend.AddEntry(trueMarker.get(), "True coordinates");
+    // legend.SetBorderSize(0);
+    // legend.SetFillStyle(0);
+    // legend.Draw();
 
-    if (!boxes.empty()) {
-      legend.AddEntry(markers.back().get(), "Hough maxima");
-      legend.AddEntry(boxes.back().get(), "Hough uncertainties");
-    }
-    TLatex tl(gPad->GetLeftMargin() + 0.03, 1. - gPad->GetTopMargin() - 0.1,
-              Form("%i drift circles on station", foundDC));
-    tl.SetTextFont(43);
-    tl.SetTextSize(24);
-    tl.SetNDC();
-    tl.Draw();
-    m_outCanvas->SaveAs("HoughHistograms.pdf");
+    // if (!boxes.empty()) {
+    //   legend.AddEntry(markers.back().get(), "Hough maxima");
+    //   legend.AddEntry(boxes.back().get(), "Hough uncertainties");
+    // }
+    // TLatex tl(gPad->GetLeftMargin() + 0.03, 1. - gPad->GetTopMargin() - 0.1,
+            //   Form("%i drift circles on station", foundDC));
+    // tl.SetTextFont(43);
+    // tl.SetTextSize(24);
+    // tl.SetNDC();
+    // tl.Draw();
+    // m_outCanvas->SaveAs("HoughHistograms.pdf");
   }
 
-  ACTS_VERBOSE("SH: " << gotSH.size());
-  ACTS_VERBOSE("DC: " << gotDC.size());
+//   ACTS_VERBOSE("SH: " << gotSH.size());
+//   ACTS_VERBOSE("DC: " << gotDC.size());
   return ActsExamples::ProcessCode::SUCCESS;
 }
 
 ActsExamples::ProcessCode ActsExamples::MuonHoughSeeder::initialize() {
   // book the output canvas
-  m_outCanvas = std::make_unique<TCanvas>("canvas", "", 800, 800);
-  m_outCanvas->SaveAs("HoughHistograms.pdf[");
-  m_outCanvas->SetRightMargin(0.12);
-  m_outCanvas->SetLeftMargin(0.12);
-  gStyle->SetPalette(kGreyScale);
-  gStyle->SetOptStat(0);
+//   m_outCanvas = std::make_unique<TCanvas>("canvas", "", 800, 800);
+//   m_outCanvas->SaveAs("HoughHistograms.pdf[");
+//   m_outCanvas->SetRightMargin(0.12);
+//   m_outCanvas->SetLeftMargin(0.12);
+//   gStyle->SetPalette(kGreyScale);
+//   gStyle->SetOptStat(0);
   return ProcessCode::SUCCESS;
 }
 ActsExamples::ProcessCode ActsExamples::MuonHoughSeeder::finalize() {
-  m_outCanvas->SaveAs("HoughHistograms.pdf]");
+//   m_outCanvas->SaveAs("HoughHistograms.pdf]");
   return ProcessCode::SUCCESS;
 }

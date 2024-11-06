@@ -26,10 +26,10 @@
 #include <utility>
 #include <vector>
 
-#include "TCanvas.h"
-#include "TH2D.h"
-#include "TMarker.h"
-#include "TStyle.h"
+// #include "TCanvas.h"
+// #include "TH2D.h"
+// #include "TMarker.h"
+// #include "TStyle.h"
 
 namespace ActsExamples {
 struct AlgorithmContext;
@@ -74,7 +74,7 @@ class MuonHoughSeeder final : public IAlgorithm {
   ReadDataHandle<DriftCircleContainer> m_inputDriftCircles{this,
                                                            "InputDriftCircles"};
   /// use ROOT for visualisation
-  std::unique_ptr<TCanvas> m_outCanvas;
+//   std::unique_ptr<TCanvas> m_outCanvas;
 };
 
 }  // namespace ActsExamples
