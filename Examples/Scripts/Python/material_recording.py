@@ -7,27 +7,33 @@ import argparse
 import acts
 from acts.examples import (
     UniformVertexGenerator,
+    CompositeVertexGenerator,
     ParametricParticleGenerator,
     FixedMultiplicityGenerator,
     EventGenerator,
     RandomNumbers,
 )
 
-import acts.examples as ae
-import acts.examples.geant4 as ag4
+import acts.examples.geant4
 from acts.examples.odd import getOpenDataDetector
+
+import math
+
+try:
+    import acts.examples.geant4.geomodel
+except ImportError:
+    # geomodel is optional for this script
+    pass
 
 u = acts.UnitConstants
 
 _material_recording_executed = False
 
-
 def runMaterialRecording(
     detectorConstructionFactory,
     outputDir,
-    tracksPerEvent=1,
+    tracksPerEvent=1000000,
     s=None,
-    etaRange=(4, 4),
 ):
     global _material_recording_executed
     if _material_recording_executed:
@@ -36,24 +42,38 @@ def runMaterialRecording(
 
     rnd = RandomNumbers(seed=228)
 
+    vertexNoWindow=UniformVertexGenerator(
+        mins=acts.Vector4(-7.4, 173.56, 16560, 0),
+        maxs=acts.Vector4(6.3, 346.1, 16560, 0),
+    )
+    weightNoWindow = 346.1 - 173.56
+    vertexWindow=UniformVertexGenerator(
+        mins=acts.Vector4(-7.4, 75.3, 16548, 0),
+        maxs=acts.Vector4(6.3, 173.56, 16548, 0),
+    )
+    weightWindow = 173.56 - 75.3
+    weights = [weightNoWindow, weightWindow]
+    vertexGen=CompositeVertexGenerator(
+        [vertexNoWindow, vertexWindow],
+        weights
+    )
+
     evGen = EventGenerator(
         level=acts.logging.INFO,
         generators=[
             EventGenerator.Generator(
                 multiplicity=FixedMultiplicityGenerator(n=1),
-                vertex=UniformVertexGenerator(
-                    mins=acts.Vector4(-8, 0, 16000, 0),
-                    maxs=acts.Vector4(8, 400, 16000, 0),
-                ),
+                vertex=vertexGen,
                 particles=ParametricParticleGenerator(
                     pdg=acts.PdgParticle.eInvalid,
                     charge=0,
                     randomizeCharge=False,
                     mass=0,
-                    p=(1 * u.GeV, 10 * u.GeV),
-                    eta=etaRange,
+                    p=(1 * u.GeV, 1 * u.GeV),
+                    thetaMin=0,
+                    thetaMax=0,
                     numParticles=tracksPerEvent,
-                    etaUniform=True,
+                    etaUniform=False,
                 ),
             )
         ],
@@ -79,13 +99,12 @@ def runMaterialRecording(
             prePostStep=True,
             recalculateTotals=True,
             inputMaterialTracks="material-tracks",
-            filePath=os.path.join(outputDir, "geant4_material_tracks.root"),
+            filePath=os.path.join(outputDir, "geant4_material_tracks_validation.root"),
             level=acts.logging.INFO,
         )
     )
 
     return s
-
 
 def main():
     p = argparse.ArgumentParser()
@@ -102,19 +121,11 @@ def main():
     args = p.parse_args()
 
     detectorConstructionFactory = None
-    if args.input == "":
-        detector, trackingGeometry, decorators = getOpenDataDetector()
-
+    if args.input.endswith(".gdml"):
         detectorConstructionFactory = (
-            acts.examples.geant4.dd4hep.DDG4DetectorConstructionFactory(detector)
-        )
-    elif args.input.endswith(".gdml"):
-        detectorConstructionFactory = (
-            ag4.GdmlDetectorConstructionFactory(args.input)
+            acts.examples.geant4.GdmlDetectorConstructionFactory(args.input)
         )
     elif args.input.endswith(".sqlite") or args.input.endswith(".db"):
-        import acts.examples.geant4.geomodel
-
         geoModelTree = acts.geomodel.readFromDb(args.input)
         detectorConstructionFactory = (
             acts.examples.geant4.geomodel.GeoModelDetectorConstructionFactory(
@@ -126,7 +137,7 @@ def main():
         detectorConstructionFactory=detectorConstructionFactory,
         tracksPerEvent=args.tracks,
         outputDir=os.getcwd(),
-        s=ae.Sequencer(events=args.events, numThreads=1),
+        s=acts.examples.Sequencer(events=args.events, numThreads=1, trackFpes=False),
     ).run()
 
 

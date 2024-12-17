@@ -15,6 +15,7 @@
 #include "Acts/Utilities/TypeTraits.hpp"
 
 #include <array>
+#include <iostream>
 #include <limits>
 
 #include "Eigen/Dense"

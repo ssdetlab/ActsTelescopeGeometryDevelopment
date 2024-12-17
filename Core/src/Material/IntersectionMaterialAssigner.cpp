@@ -28,8 +28,9 @@ std::vector<Acts::SurfaceIntersection> forwardOrderedIntersections(
 
     // Take the closest
     auto closestForward = sMultiIntersection.closestForward();
-    if (closestForward.status() >= Acts::IntersectionStatus::reachable &&
-        closestForward.pathLength() > 0.0) {
+    if (closestForward.status() == Acts::IntersectionStatus::onSurface ||
+        (closestForward.status() == Acts::IntersectionStatus::reachable &&
+        closestForward.pathLength() > 0.0)) {
       sIntersections.push_back(closestForward);
       continue;
     }

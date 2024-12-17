@@ -54,8 +54,11 @@ void addJson(Context& ctx) {
                std::shared_ptr<JsonMaterialDecorator>>(m,
                                                        "JsonMaterialDecorator")
         .def(py::init<const MaterialMapJsonConverter::Config&,
-                      const std::string&, Acts::Logging::Level, bool, bool>(),
+                      const std::string&, Acts::Logging::Level,
+                      const std::vector<Acts::GeometryIdentifier>&, bool,
+                      bool>(),
              py::arg("rConfig"), py::arg("jFileName"), py::arg("level"),
+             py::arg("vetos") = std::vector<Acts::GeometryIdentifier>{},
              py::arg("clearSurfaceMaterial") = true,
              py::arg("clearVolumeMaterial") = true);
   }

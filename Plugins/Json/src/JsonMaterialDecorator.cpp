@@ -16,13 +16,19 @@
 
 #include "Acts/Plugins/Json/JsonMaterialDecorator.hpp"
 
+#include "Acts/Material/HomogeneousSurfaceMaterial.hpp"
+
+#include <algorithm>
+
 namespace Acts {
 
 JsonMaterialDecorator::JsonMaterialDecorator(
     const MaterialMapJsonConverter::Config& rConfig,
     const std::string& jFileName, Acts::Logging::Level level,
+    const std::vector<Acts::GeometryIdentifier>& vetos,
     bool clearSurfaceMaterial, bool clearVolumeMaterial)
     : m_readerConfig(rConfig),
+      m_vetos(vetos),
       m_clearSurfaceMaterial(clearSurfaceMaterial),
       m_clearVolumeMaterial(clearVolumeMaterial),
       m_logger{getDefaultLogger("JsonMaterialDecorator", level)} {
@@ -52,6 +58,11 @@ JsonMaterialDecorator::JsonMaterialDecorator(
 }
 
 void JsonMaterialDecorator::decorate(Surface& surface) const {
+  if (std::any_of(m_vetos.begin(), m_vetos.end(),
+                  [&](const auto& id) { return surface.geometryId() == id; })) {
+    return;
+  }
+
   ACTS_VERBOSE("Processing surface: " << surface.geometryId());
   // Clear the material if registered to do so
   if (m_clearSurfaceMaterial) {

@@ -58,7 +58,6 @@ target_link_libraries(
         ActsExamplesIoCsv
         ActsExamplesIoObj
         ActsExamplesIoJson
-        ActsExamplesIoPerformance
         ActsExamplesGenerators
         ActsExamplesPrinters
         ActsExamplesTrackFinding

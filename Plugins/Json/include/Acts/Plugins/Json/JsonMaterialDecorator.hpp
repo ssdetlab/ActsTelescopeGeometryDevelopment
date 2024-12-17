@@ -38,6 +38,7 @@ class JsonMaterialDecorator : public IMaterialDecorator {
   JsonMaterialDecorator(const MaterialMapJsonConverter::Config& rConfig,
                         const std::string& jFileName,
                         Acts::Logging::Level level,
+                        const std::vector<Acts::GeometryIdentifier>& vetos = {},
                         bool clearSurfaceMaterial = true,
                         bool clearVolumeMaterial = true);
 
@@ -55,6 +56,8 @@ class JsonMaterialDecorator : public IMaterialDecorator {
   MaterialMapJsonConverter::Config m_readerConfig;
   SurfaceMaterialMap m_surfaceMaterialMap;
   VolumeMaterialMap m_volumeMaterialMap;
+
+  std::vector<Acts::GeometryIdentifier> m_vetos{};
 
   bool m_clearSurfaceMaterial{true};
   bool m_clearVolumeMaterial{true};

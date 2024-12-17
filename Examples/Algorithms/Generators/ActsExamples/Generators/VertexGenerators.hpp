@@ -1,10 +1,10 @@
-// This file is part of the Acts project.
+// This file is part of the ACTS project.
 //
-// Copyright (C) 2019-2020 CERN for the benefit of the Acts project
+// Copyright (C) 2016 CERN for the benefit of the ACTS project
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #pragma once
 
@@ -12,7 +12,11 @@
 #include "ActsExamples/Framework/RandomNumbers.hpp"
 #include "ActsExamples/Generators/EventGenerator.hpp"
 
+#include <cassert>
+#include <memory>
+#include <numbers>
 #include <random>
+#include <vector>
 
 namespace ActsExamples {
 
@@ -46,6 +50,35 @@ struct GaussianPrimaryVertexPositionGenerator
   }
 };
 
+/// @brief Uniform vertex generator
+struct UniformVertexGenerator
+    : public EventGenerator::PrimaryVertexPositionGenerator {
+  Acts::Vector4 mins{0., 0., 0., 0.};
+  Acts::Vector4 maxs{0., 0., 0., 0.};
+
+  Acts::Vector4 operator()(RandomEngine& rng) const override {
+    std::uniform_real_distribution<Acts::ActsScalar> uniform;
+    Acts::Vector4 vertex{uniform(rng), uniform(rng), uniform(rng),
+                         uniform(rng)};
+    return mins + vertex.cwiseProduct(maxs - mins);
+  }
+};
+
+/// @brief Composite generator
+struct CompositeVertexGenerator
+    : public EventGenerator::PrimaryVertexPositionGenerator {
+  std::vector<std::shared_ptr<EventGenerator::PrimaryVertexPositionGenerator>>
+      gens;
+
+  std::vector<Acts::ActsScalar> weights;
+
+  Acts::Vector4 operator()(RandomEngine& rng) const override {
+    std::discrete_distribution<> selector(weights.begin(), weights.end());
+    int idx = selector(rng);
+    return gens.at(idx)->operator()(rng);
+  }
+};
+
 //
 struct GaussianDisplacedVertexPositionGenerator
     : public EventGenerator::PrimaryVertexPositionGenerator {
@@ -57,8 +90,8 @@ struct GaussianDisplacedVertexPositionGenerator
   double tStdDev = 1;
 
   Acts::Vector4 operator()(RandomEngine& rng) const override {
-    double min_value = -M_PI;  // -π
-    double max_value = M_PI;   // π
+    double min_value = -std::numbers::pi;
+    double max_value = std::numbers::pi;
 
     std::uniform_real_distribution<> uniform(min_value, max_value);
 
@@ -79,22 +112,4 @@ struct GaussianDisplacedVertexPositionGenerator
     return Acts::Vector4(x, y, z, t);
   }
 };
-
-struct UniformPrimaryVertexPositionGenerator
-    : public EventGenerator::PrimaryVertexPositionGenerator {
-  Acts::Vector4 mins = {0.0, 0.0, 0.0, 0.0};
-  Acts::Vector4 maxs = {0.0, 0.0, 0.0, 0.0};
-
-  Acts::Vector4 operator()(RandomEngine& rng) const override {
-    auto uniform = std::uniform_real_distribution<double>(0.0, 1.0);
-    Acts::Vector4 rndUniform = {
-        uniform(rng),
-        uniform(rng),
-        uniform(rng),
-        uniform(rng),
-    };
-    return mins + rndUniform.cwiseProduct(maxs - mins);
-  }
-};
-
 }  // namespace ActsExamples

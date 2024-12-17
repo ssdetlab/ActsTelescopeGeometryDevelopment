@@ -1,28 +1,25 @@
-// This file is part of the Acts project.
+// This file is part of the ACTS project.
 //
-// Copyright (C) 2021 CERN for the benefit of the Acts project
+// Copyright (C) 2016 CERN for the benefit of the ACTS project
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 #include "Acts/Definitions/Algebra.hpp"
-#include "Acts/Definitions/PdgParticle.hpp"
 #include "Acts/Plugins/Python/Utilities.hpp"
+#include "Acts/Utilities/AngleHelpers.hpp"
 #include "Acts/Utilities/Logger.hpp"
 #include "ActsExamples/EventData/SimParticle.hpp"
-#include "ActsExamples/Framework/RandomNumbers.hpp"
 #include "ActsExamples/Generators/EventGenerator.hpp"
 #include "ActsExamples/Generators/MultiplicityGenerators.hpp"
 #include "ActsExamples/Generators/ParametricParticleGenerator.hpp"
 #include "ActsExamples/Generators/VertexGenerators.hpp"
 
-#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -35,16 +32,6 @@ class IReader;
 }  // namespace ActsExamples
 
 namespace py = pybind11;
-
-namespace {
-double thetaToEta(double theta) {
-  assert(theta != 0);
-  return -1 * std::log(std::tan(theta / 2.));
-}
-double etaToTheta(double eta) {
-  return 2 * std::atan(std::exp(-eta));
-}
-}  // namespace
 
 namespace Acts::Python {
 
@@ -115,6 +102,43 @@ void addGenerators(Context& ctx) {
           &ActsExamples::GaussianPrimaryVertexPositionGenerator::stddev)
       .def_readwrite(
           "mean", &ActsExamples::GaussianPrimaryVertexPositionGenerator::mean);
+
+  py::class_<ActsExamples::UniformVertexGenerator,
+             ActsExamples::EventGenerator::PrimaryVertexPositionGenerator,
+             std::shared_ptr<ActsExamples::UniformVertexGenerator>>(
+      mex, "UniformVertexGenerator")
+      .def(py::init<>())
+      .def(py::init([](const Acts::Vector4& mins, const Acts::Vector4& maxs) {
+             ActsExamples::UniformVertexGenerator u;
+             u.mins = mins;
+             u.maxs = maxs;
+             return u;
+           }),
+           py::arg("mins"), py::arg("maxs"))
+      .def_readwrite("mins", &ActsExamples::UniformVertexGenerator::mins)
+      .def_readwrite("maxs", &ActsExamples::UniformVertexGenerator::maxs);
+
+  py::class_<ActsExamples::CompositeVertexGenerator,
+             ActsExamples::EventGenerator::PrimaryVertexPositionGenerator,
+             std::shared_ptr<ActsExamples::CompositeVertexGenerator>>(
+      mex, "CompositeVertexGenerator")
+      .def(py::init<>())
+      .def(py::init([](std::vector<
+                           std::shared_ptr<ActsExamples::EventGenerator::
+                                               PrimaryVertexPositionGenerator>>
+                           gens,
+                       const std::vector<Acts::ActsScalar>& weights) {
+             assert(weights.size() == gens.size());
+             ActsExamples::CompositeVertexGenerator g;
+             g.gens = gens;
+             g.weights = weights;
+             return g;
+           }),
+           py::arg("gens"), py::arg("weights"))
+      .def_readwrite("gens", &ActsExamples::CompositeVertexGenerator::gens)
+      .def_readwrite("weights",
+                     &ActsExamples::CompositeVertexGenerator::weights);
+
   py::class_<
       ActsExamples::GaussianDisplacedVertexPositionGenerator,
       ActsExamples::EventGenerator::PrimaryVertexPositionGenerator,
@@ -168,24 +192,6 @@ void addGenerators(Context& ctx) {
       .def_readwrite("fixed",
                      &ActsExamples::FixedPrimaryVertexPositionGenerator::fixed);
 
-  py::class_<
-      ActsExamples::UniformPrimaryVertexPositionGenerator,
-      ActsExamples::EventGenerator::PrimaryVertexPositionGenerator,
-      std::shared_ptr<ActsExamples::UniformPrimaryVertexPositionGenerator>>(
-      mex, "UniformVertexGenerator")
-      .def(py::init<>())
-      .def(py::init([](const Acts::Vector4& mins, const Acts::Vector4& maxs) {
-             ActsExamples::UniformPrimaryVertexPositionGenerator u;
-             u.mins = mins;
-             u.maxs = maxs;
-             return u;
-           }),
-           py::arg("mins"), py::arg("maxs"))
-      .def_readwrite("mins",
-                     &ActsExamples::UniformPrimaryVertexPositionGenerator::mins)
-      .def_readwrite(
-          "maxs", &ActsExamples::UniformPrimaryVertexPositionGenerator::maxs);
-
   py::class_<ActsExamples::SimParticle>(mex, "SimParticle");
   py::class_<ActsExamples::SimParticleContainer>(mex, "SimParticleContainer");
 
@@ -208,6 +214,7 @@ void addGenerators(Context& ctx) {
         .def_readwrite("pMin", &Config::pMin)
         .def_readwrite("pMax", &Config::pMax)
         .def_readwrite("pTransverse", &Config::pTransverse)
+        .def_readwrite("pLogUniform", &Config::pLogUniform)
         .def_readwrite("pdg", &Config::pdg)
         .def_readwrite("randomizeCharge", &Config::randomizeCharge)
         .def_readwrite("numParticles", &Config::numParticles)
@@ -236,12 +243,12 @@ void addGenerators(Context& ctx) {
         .def_property(
             "eta",
             [](Config& cfg) {
-              return std::pair{thetaToEta(cfg.thetaMin),
-                               thetaToEta(cfg.thetaMax)};
+              return std::pair{Acts::AngleHelpers::etaFromTheta(cfg.thetaMin),
+                               Acts::AngleHelpers::etaFromTheta(cfg.thetaMax)};
             },
             [](Config& cfg, std::pair<double, double> value) {
-              cfg.thetaMin = etaToTheta(value.first);
-              cfg.thetaMax = etaToTheta(value.second);
+              cfg.thetaMin = Acts::AngleHelpers::thetaFromEta(value.first);
+              cfg.thetaMax = Acts::AngleHelpers::thetaFromEta(value.second);
             });
   }
 
