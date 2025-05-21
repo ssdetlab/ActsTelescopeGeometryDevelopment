@@ -15,6 +15,7 @@
 #include "Acts/MagneticField/MagneticFieldContext.hpp"
 #include "Acts/Material/interface/IAssignmentFinder.hpp"
 
+#include <limits>
 #include <utility>
 #include <vector>
 

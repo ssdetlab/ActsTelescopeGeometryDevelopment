@@ -59,7 +59,7 @@ class DetectorNavigator {
 
     std::vector<GeometryIdentifier> measurementSurfaces = {};
     void insertMeasurementSurface(GeometryIdentifier geoId) {
-        measurementSurfaces.push_back(geoId);
+      measurementSurfaces.push_back(geoId);
     }
 
     void setPlainOptions(const NavigatorPlainOptions& options) {
@@ -74,6 +74,8 @@ class DetectorNavigator {
   /// and keep thread-local navigation information
   struct State : public NavigationState {
     Options options;
+
+    const DetectorVolume* startVolume = nullptr;
 
     /// Navigation state - external state: the current surface
     const Surface* currentSurface = nullptr;
@@ -92,12 +94,12 @@ class DetectorNavigator {
                                  getDefaultLogger("DetectorNavigator",
                                                   Logging::Level::INFO))
       : m_cfg{cfg}, m_logger{std::move(_logger)} {
-        for (auto& v : m_cfg.detector->volumes()) {
-            for (auto& s : v->surfaces()) {
-                volumeIdAccessor[s->geometryId()] = v->geometryId();
-            }
-        }
+    for (auto& v : m_cfg.detector->volumes()) {
+      for (auto& s : v->surfaces()) {
+        volumeIdAccessor[s->geometryId()] = v->geometryId();
       }
+    }
+  }
 
   State makeState(const Options& options) const {
     State state;
@@ -171,7 +173,7 @@ class DetectorNavigator {
     }
 
     for (auto& geoId : state.options.navigation.measurementSurfaces) {
-        nState.measurementSurfaces.emplace(volumeIdAccessor.at(geoId), geoId);
+      nState.measurementSurfaces.emplace(volumeIdAccessor.at(geoId), geoId);
     }
 
     fillNavigationState(state, stepper, nState);
@@ -182,6 +184,8 @@ class DetectorNavigator {
     if (nState.currentVolume == nullptr) {
       throw std::invalid_argument("DetectorNavigator: no current volume found");
     }
+
+    nState.startVolume = nState.currentVolume;
 
     updateCandidateSurfaces(state, stepper);
   }
@@ -258,12 +262,12 @@ class DetectorNavigator {
                                   << "surface status is " << surfaceStatus);
 
       if (surfaceStatus == Intersection3D::Status::onSurface &&
-        c.surface != nullptr &&
-        isMeasurementSurface) {
-            ACTS_VERBOSE(volInfo(state)
-                        << posInfo(state, stepper) << "landed on measurement surface");
-            stepper.updateStepSize(state.stepping, 0, ConstrainedStep::Type::actor, true);
-            break;
+          c.surface != nullptr && isMeasurementSurface) {
+        ACTS_VERBOSE(volInfo(state) << posInfo(state, stepper)
+                                    << "landed on measurement surface");
+        stepper.updateStepSize(state.stepping, 0, ConstrainedStep::Type::actor,
+                               true);
+        break;
       }
       if (surfaceStatus == Intersection3D::Status::reachable) {
         ACTS_VERBOSE(volInfo(state)
@@ -386,7 +390,9 @@ class DetectorNavigator {
         nState.currentSurface = nextSurface;
         ACTS_VERBOSE(volInfo(state)
                      << posInfo(state, stepper) << "current surface set to "
-                     << nState.currentSurface->geometryId());
+                     << nState.currentSurface->geometryId() << " "
+                     << nState.currentSurface->center(Acts::GeometryContext())
+                            .transpose());
         ++nState.surfaceCandidateIndex;
       }
     }

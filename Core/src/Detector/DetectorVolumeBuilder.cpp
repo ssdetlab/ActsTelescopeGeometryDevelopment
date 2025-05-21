@@ -13,6 +13,7 @@
 #include "Acts/Detector/interface/IExternalStructureBuilder.hpp"
 #include "Acts/Detector/interface/IGeometryIdGenerator.hpp"
 #include "Acts/Detector/interface/IInternalStructureBuilder.hpp"
+#include "Acts/Geometry/DetectorElementBase.hpp"
 #include "Acts/Geometry/VolumeBounds.hpp"
 #include "Acts/Navigation/DetectorVolumeFinders.hpp"
 #include "Acts/Navigation/InternalNavigation.hpp"
@@ -20,6 +21,7 @@
 
 #include <iterator>
 #include <map>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -101,11 +103,21 @@ Acts::Experimental::DetectorVolumeBuilder::construct(
     }
   }
 
+  // Build detector elements if needed
+  std::vector<std::shared_ptr<DetectorElementBase>> detectorElements{};
+  if (m_cfg.detectorElementBuilder != nullptr) {
+    ACTS_DEBUG("Building detector elements");
+
+    detectorElements =
+        m_cfg.detectorElementBuilder->construct(dVolume->surfacePtrs(), gctx);
+  }
+
   // Add to the root volume collection if configured
   rootVolumes.push_back(dVolume);
   // The newly built volume is the single produced volume
   return Acts::Experimental::DetectorComponent{
       {dVolume},
       portalContainer,
-      RootDetectorVolumes{rootVolumes, tryRootVolumes()}};
+      RootDetectorVolumes{rootVolumes, tryRootVolumes()},
+      detectorElements};
 }

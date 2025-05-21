@@ -11,6 +11,7 @@
 #include "Acts/Detector/DetectorComponents.hpp"
 #include "Acts/Detector/ProtoBinning.hpp"
 #include "Acts/Detector/interface/IDetectorComponentBuilder.hpp"
+#include "Acts/Detector/interface/IDetectorElementBuilder.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
 #include "Acts/Utilities/Logger.hpp"
 
@@ -42,6 +43,9 @@ class DetectorVolumeBuilder : public IDetectorComponentBuilder {
     std::shared_ptr<const IInternalStructureBuilder> internalsBuilder = nullptr;
     /// The geometry id generator
     std::shared_ptr<const IGeometryIdGenerator> geoIdGenerator = nullptr;
+    /// Detector element builder
+    std::shared_ptr<const IDetectorElementBuilder> detectorElementBuilder =
+        nullptr;
     /// Material binning to be assigned to portals
     std::map<unsigned int, BinningDescription> portalMaterialBinning = {};
     /// Add eventual internal volume to root

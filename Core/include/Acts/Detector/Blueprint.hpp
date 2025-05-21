@@ -11,6 +11,7 @@
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Definitions/Common.hpp"
 #include "Acts/Detector/ProtoBinning.hpp"
+#include "Acts/Detector/interface/IDetectorElementBuilder.hpp"
 #include "Acts/Geometry/Extent.hpp"
 #include "Acts/Geometry/VolumeBounds.hpp"
 #include "Acts/Utilities/BinningData.hpp"
@@ -75,12 +76,14 @@ struct Node final {
   Node(const std::string& n, const Transform3& t, VolumeBounds::BoundsType bt,
        const std::vector<ActsScalar>& bv,
        std::shared_ptr<const IInternalStructureBuilder> isb = nullptr,
+       std::shared_ptr<const IDetectorElementBuilder> deb = nullptr,
        const Extent& e = Extent())
       : name(n),
         transform(t),
         boundsType(bt),
         boundaryValues(bv),
         internalsBuilder(std::move(isb)),
+        detectorElementBuilder(std::move(deb)),
         extent(e) {}
 
   /// Name identification of this node
@@ -111,6 +114,9 @@ struct Node final {
   std::shared_ptr<const IGeometryIdGenerator> geoIdGenerator = nullptr;
   /// Internal structure builder - for leaf nodes
   std::shared_ptr<const IInternalStructureBuilder> internalsBuilder = nullptr;
+  /// Detector element builder - for leaf nodes
+  std::shared_ptr<const IDetectorElementBuilder> detectorElementBuilder =
+      nullptr;
 
   /// An optional extent object
   Extent extent = Extent();

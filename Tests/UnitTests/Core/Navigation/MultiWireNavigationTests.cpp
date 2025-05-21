@@ -83,7 +83,7 @@ BOOST_AUTO_TEST_CASE(Navigation_in_Indexed_Surfaces) {
   mlCfg.mlBounds = vBounds;
 
   MultiWireStructureBuilder mlBuilder(mlCfg);
-  auto [volumes, portals, roots] = mlBuilder.construct(tContext);
+  auto [volumes, portals, roots, elements] = mlBuilder.construct(tContext);
 
   Acts::Experimental::NavigationState nState;
   nState.position = Acts::Vector3(0., -60., 0.);

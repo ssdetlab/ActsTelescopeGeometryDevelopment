@@ -13,7 +13,6 @@
 #include "Acts/Utilities/Delegate.hpp"
 #include "Acts/Utilities/Enumerate.hpp"
 
-#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
@@ -125,6 +124,16 @@ Acts::Experimental::Detector::Detector(
       GeometryHierarchyMap<const Surface*>(std::move(surfaceGeoIdVec));
 }
 
+Acts::Experimental::Detector::Detector(
+    std::string name, std::vector<std::shared_ptr<DetectorVolume>> rootVolumes,
+    ExternalNavigationDelegate detectorVolumeFinder,
+    std::vector<std::shared_ptr<DetectorElementBase>> detectorElements)
+    : Acts::Experimental::Detector::Detector(std::move(name),
+                                             std::move(rootVolumes),
+                                             std::move(detectorVolumeFinder)) {
+  m_detectorElements = std::move(detectorElements);
+}
+
 std::shared_ptr<Acts::Experimental::Detector>
 Acts::Experimental::Detector::makeShared(
     std::string name, std::vector<std::shared_ptr<DetectorVolume>> rootVolumes,
@@ -132,6 +141,16 @@ Acts::Experimental::Detector::makeShared(
   return std::shared_ptr<Detector>(
       new Detector(std::move(name), std::move(rootVolumes),
                    std::move(detectorVolumeFinder)));
+}
+
+std::shared_ptr<Acts::Experimental::Detector>
+Acts::Experimental::Detector::makeShared(
+    std::string name, std::vector<std::shared_ptr<DetectorVolume>> rootVolumes,
+    ExternalNavigationDelegate detectorVolumeFinder,
+    std::vector<std::shared_ptr<DetectorElementBase>> detectorElements) {
+  return std::shared_ptr<Detector>(new Detector(
+      std::move(name), std::move(rootVolumes), std::move(detectorVolumeFinder),
+      std::move(detectorElements)));
 }
 
 std::vector<std::shared_ptr<Acts::Experimental::DetectorVolume>>&

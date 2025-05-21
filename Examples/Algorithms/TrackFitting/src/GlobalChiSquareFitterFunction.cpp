@@ -108,9 +108,9 @@ struct GlobalChiSquareFitterFunctionImpl final : public TrackFitterFunction {
                                const GeneralFitterOptions& options,
                                const MeasurementCalibratorAdapter& calibrator,
                                TrackContainer& tracks) const override {
-    const auto gx2fOptions = makeGx2fOptions(options, calibrator);
-    return fitter.fit(sourceLinks.begin(), sourceLinks.end(), initialParameters,
-                      gx2fOptions, tracks);
+    /*const auto gx2fOptions = makeGx2fOptions(options, calibrator);*/
+    /*return fitter.fit(sourceLinks.begin(), sourceLinks.end(), initialParameters,*/
+    /*                  gx2fOptions, tracks);*/
   }
 
   // We need a placeholder for the directNavigator overload. Otherwise, we would
@@ -136,36 +136,38 @@ ActsExamples::makeGlobalChiSquareFitterFunction(
     bool multipleScattering, bool energyLoss,
     Acts::FreeToBoundCorrection freeToBoundCorrection, std::size_t nUpdateMax,
     double relChi2changeCutOff, const Acts::Logger& logger) {
-  // Stepper should be copied into the fitters
-  const Stepper stepper(std::move(magneticField));
-
-  // Standard fitter
-  const auto& geo = *trackingGeometry;
-  Acts::Navigator::Config cfg{std::move(trackingGeometry)};
-  cfg.resolvePassive = false;
-  cfg.resolveMaterial = true;
-  cfg.resolveSensitive = true;
-  Acts::Navigator navigator(cfg, logger.cloneWithSuffix("Navigator"));
-  Propagator propagator(stepper, std::move(navigator),
-                        logger.cloneWithSuffix("Propagator"));
-  Fitter trackFitter(std::move(propagator), logger.cloneWithSuffix("Fitter"));
-
-  // Direct fitter
-  Acts::DirectNavigator directNavigator{
-      logger.cloneWithSuffix("DirectNavigator")};
-  DirectPropagator directPropagator(stepper, std::move(directNavigator),
-                                    logger.cloneWithSuffix("DirectPropagator"));
-  DirectFitter directTrackFitter(std::move(directPropagator),
-                                 logger.cloneWithSuffix("DirectFitter"));
-
-  // build the fitter function. owns the fitter object.
-  auto fitterFunction = std::make_shared<GlobalChiSquareFitterFunctionImpl>(
-      std::move(trackFitter), std::move(directTrackFitter), geo);
-  fitterFunction->multipleScattering = multipleScattering;
-  fitterFunction->energyLoss = energyLoss;
-  fitterFunction->freeToBoundCorrection = freeToBoundCorrection;
-  fitterFunction->nUpdateMax = nUpdateMax;
-  fitterFunction->relChi2changeCutOff = relChi2changeCutOff;
-
-  return fitterFunction;
+  //  // Stepper should be copied into the fitters
+  //  const Stepper stepper(std::move(magneticField));
+  //
+  //  // Standard fitter
+  //  const auto& geo = *trackingGeometry;
+  //  Acts::Navigator::Config cfg{std::move(trackingGeometry)};
+  //  cfg.resolvePassive = false;
+  //  cfg.resolveMaterial = true;
+  //  cfg.resolveSensitive = true;
+  //  Acts::Navigator navigator(cfg, logger.cloneWithSuffix("Navigator"));
+  //  Propagator propagator(stepper, std::move(navigator),
+  //                        logger.cloneWithSuffix("Propagator"));
+  //  Fitter trackFitter(std::move(propagator),
+  //  logger.cloneWithSuffix("Fitter"));
+  //
+  //  // Direct fitter
+  //  Acts::DirectNavigator directNavigator{
+  //      logger.cloneWithSuffix("DirectNavigator")};
+  //  DirectPropagator directPropagator(stepper, std::move(directNavigator),
+  //                                    logger.cloneWithSuffix("DirectPropagator"));
+  //  DirectFitter directTrackFitter(std::move(directPropagator),
+  //                                 logger.cloneWithSuffix("DirectFitter"));
+  //
+  //  // build the fitter function. owns the fitter object.
+  //  auto fitterFunction = std::make_shared<GlobalChiSquareFitterFunctionImpl>(
+  //      std::move(trackFitter), std::move(directTrackFitter), geo);
+  //  fitterFunction->multipleScattering = multipleScattering;
+  //  fitterFunction->energyLoss = energyLoss;
+  //  fitterFunction->freeToBoundCorrection = freeToBoundCorrection;
+  //  fitterFunction->nUpdateMax = nUpdateMax;
+  //  fitterFunction->relChi2changeCutOff = relChi2changeCutOff;
+  //
+  //  return fitterFunction;
+  return nullptr;
 }

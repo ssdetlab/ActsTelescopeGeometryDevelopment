@@ -35,7 +35,7 @@ Acts::Experimental::DetectorBuilder::construct(
   }
   ACTS_DEBUG("Building a detector with name " << m_cfg.name);
 
-  auto [volumes, portals, roots] = m_cfg.builder->construct(gctx);
+  auto [volumes, portals, roots, elements] = m_cfg.builder->construct(gctx);
 
   // Assign the geometry ids to the detector - if configured
   if (m_cfg.geoIdGenerator != nullptr) {
@@ -63,5 +63,5 @@ Acts::Experimental::DetectorBuilder::construct(
   }
 
   return Detector::makeShared(m_cfg.name, std::move(roots.volumes),
-                              std::move(roots.volumeFinder));
+                              std::move(roots.volumeFinder), elements);
 }

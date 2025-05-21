@@ -77,7 +77,7 @@ BOOST_AUTO_TEST_CASE(Multi_Wire_Structure_Builder_StrawSurfacesCreation) {
                    -vBounds[1], vBounds[1], nSurfacesY, 0u)};
 
   MultiWireStructureBuilder mlBuilder(mlCfg);
-  auto [volumes, portals, roots] = mlBuilder.construct(tContext);
+  auto [volumes, portals, roots, elements] = mlBuilder.construct(tContext);
 
   BOOST_CHECK_EQUAL(volumes.size(), 1u);
   BOOST_CHECK_EQUAL(volumes.front()->surfaces().size(),

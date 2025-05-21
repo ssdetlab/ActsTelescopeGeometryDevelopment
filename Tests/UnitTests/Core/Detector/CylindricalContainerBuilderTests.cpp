@@ -189,7 +189,7 @@ BOOST_AUTO_TEST_CASE(CylindricaContainerBuildingZ) {
   auto tripleZ = std::make_shared<CylindricalContainerBuilder>(
       tripleZCfg, getDefaultLogger("TripleBuilderZ", Logging::VERBOSE));
 
-  auto [volumes, portals, roots] = tripleZ->construct(tContext);
+  auto [volumes, portals, roots, elements] = tripleZ->construct(tContext);
 
   BOOST_CHECK_EQUAL(portals.size(), 4u);
   BOOST_CHECK_EQUAL(roots.volumes.size(), 3u);
@@ -234,7 +234,7 @@ BOOST_AUTO_TEST_CASE(CylindricaContainerBuildingR) {
   auto barrelR = std::make_shared<CylindricalContainerBuilder>(
       barrelRCfg, getDefaultLogger("BarrelBuilderR", Logging::VERBOSE));
 
-  auto [volumes, portals, roots] = barrelR->construct(tContext);
+  auto [volumes, portals, roots, elements] = barrelR->construct(tContext);
 
   BOOST_CHECK_EQUAL(portals.size(), 4u);
   BOOST_CHECK_EQUAL(roots.volumes.size(), 3u);
@@ -271,7 +271,7 @@ BOOST_AUTO_TEST_CASE(CylindricaContainerBuildingPhi) {
   auto barrelPhi = std::make_shared<CylindricalContainerBuilder>(
       barrelPhiCfg, getDefaultLogger("BarrelBuilderPhi", Logging::VERBOSE));
 
-  auto [volumes, portals, roots] = barrelPhi->construct(tContext);
+  auto [volumes, portals, roots, elements] = barrelPhi->construct(tContext);
 
   BOOST_CHECK_EQUAL(portals.size(), 4u);
   BOOST_CHECK_EQUAL(roots.volumes.size(), 5u);
@@ -342,7 +342,7 @@ BOOST_AUTO_TEST_CASE(CylindricalContainerBuilderDetector) {
   auto detector = std::make_shared<CylindricalContainerBuilder>(
       detectorCfg, getDefaultLogger("DetectorBuilder", Logging::VERBOSE));
 
-  auto [volumes, portals, roots] = detector->construct(tContext);
+  auto [volumes, portals, roots, elements] = detector->construct(tContext);
   BOOST_CHECK_EQUAL(portals.size(), 3u);
   BOOST_CHECK_EQUAL(roots.volumes.size(), 6u);
 }

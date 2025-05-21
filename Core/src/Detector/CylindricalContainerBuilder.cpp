@@ -214,16 +214,20 @@ Acts::Experimental::CylindricalContainerBuilder::construct(
   std::vector<std::shared_ptr<DetectorVolume>> volumes;
   std::vector<DetectorComponent::PortalContainer> containers;
   std::vector<std::shared_ptr<DetectorVolume>> rootVolumes;
+  std::vector<std::shared_ptr<DetectorElementBase>> detectorElements;
   // Run through the builders
   std::for_each(
       m_cfg.builders.begin(), m_cfg.builders.end(), [&](const auto& builder) {
-        auto [cVolumes, cContainer, cRoots] = builder->construct(gctx);
+        auto [cVolumes, cContainer, cRoots, cElements] =
+            builder->construct(gctx);
         atNavigationLevel = (atNavigationLevel && cVolumes.size() == 1u);
         // Collect individual components, volumes, containers, roots
         volumes.insert(volumes.end(), cVolumes.begin(), cVolumes.end());
         containers.push_back(cContainer);
         rootVolumes.insert(rootVolumes.end(), cRoots.volumes.begin(),
                            cRoots.volumes.end());
+        detectorElements.insert(detectorElements.end(), cElements.begin(),
+                                cElements.end());
       });
   // Navigation level detected, connect volumes (cleaner and faster than
   // connect containers)
@@ -275,11 +279,12 @@ Acts::Experimental::CylindricalContainerBuilder::construct(
         volumes, portalContainer,
         RootDetectorVolumes{
             rootVolumes,
-            m_cfg.rootVolumeFinderBuilder->construct(gctx, rootVolumes)}};
+            m_cfg.rootVolumeFinderBuilder->construct(gctx, rootVolumes)},
+        detectorElements};
   }
 
   // Return the container
   return Acts::Experimental::DetectorComponent{
       volumes, portalContainer,
-      RootDetectorVolumes{rootVolumes, tryRootVolumes()}};
+      RootDetectorVolumes{rootVolumes, tryRootVolumes()}, detectorElements};
 }

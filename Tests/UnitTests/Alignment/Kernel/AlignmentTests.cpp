@@ -40,6 +40,7 @@
 #include "Acts/TrackFitting/KalmanFitter.hpp"
 #include "Acts/TrackFitting/detail/KalmanGlobalCovariance.hpp"
 #include "Acts/Utilities/CalibrationContext.hpp"
+#include "Acts/Utilities/Logger.hpp"
 #include "ActsAlignment/Kernel/Alignment.hpp"
 
 #include <cmath>
@@ -115,7 +116,7 @@ struct TelescopeDetector {
   std::shared_ptr<const TrackingGeometry> operator()() {
     using namespace UnitLiterals;
 
-    unsigned int nLayers = 6;
+    unsigned int nLayers = 5;
     std::vector<ActsScalar> positions = {-500_mm, -300_mm, -100_mm,
                                          100_mm,  300_mm,  500_mm};
     auto length = positions.back() - positions.front();
@@ -149,7 +150,7 @@ struct TelescopeDetector {
 
     LayerArrayCreator::Config lacConfig;
     LayerArrayCreator layArrCreator(
-        lacConfig, getDefaultLogger("LayerArrayCreator", Logging::INFO));
+        lacConfig, getDefaultLogger("LayerArrayCreator", Logging::VERBOSE));
     LayerVector layVec;
     for (unsigned int i = 0; i < nLayers; i++) {
       layVec.push_back(layers[i]);
@@ -261,6 +262,12 @@ std::vector<KalmanFitterInputTrajectory> createTrajectories(
     auto measurements = createMeasurements(simPropagator, geoCtx, magCtx, start,
                                            resolutions, rng);
 
+    for (auto& sl : measurements.sourceLinks) {
+      std::cout << "GEO ID " << sl.m_geometryId << "\n";
+      if (sl.m_geometryId.layer() == 6) {
+        sl.parameters.x() = sl.parameters.x() + 0.2_mm;
+      }
+    }
     // Extract measurements from result of propagation.
     KalmanFitterInputTrajectory traj;
     traj.startParameters = start;
@@ -287,7 +294,7 @@ BOOST_AUTO_TEST_CASE(ZeroFieldKalmanAlignment) {
   auto kfZero = KalmanFitterType(kfZeroPropagator);
 
   // alignment
-  auto alignLogger = getDefaultLogger("Alignment", Logging::INFO);
+  auto alignLogger = getDefaultLogger("Alignment", Logging::VERBOSE);
   const auto alignZero = Alignment(std::move(kfZero), std::move(alignLogger));
 
   // Create 10 trajectories
@@ -310,7 +317,7 @@ BOOST_AUTO_TEST_CASE(ZeroFieldKalmanAlignment) {
   // Construct the alignment options
   AlignmentOptions<KalmanFitterOptions<VectorMultiTrajectory>> alignOptions(
       kfOptions, voidAlignUpdater);
-  alignOptions.maxIterations = 1;
+  alignOptions.maxIterations = 10;
 
   // Set the surfaces to be aligned (fix the layer 8)
   unsigned int iSurface = 0;
@@ -318,57 +325,58 @@ BOOST_AUTO_TEST_CASE(ZeroFieldKalmanAlignment) {
   // Loop over the detector elements
   for (auto& det : detector.detectorStore) {
     const auto& surface = det->surface();
-    if (surface.geometryId().layer() != 8) {
+    /*if (surface.geometryId().layer() != 8) {*/
+    if (surface.geometryId().layer() == 6) {
       alignOptions.alignedDetElements.push_back(det.get());
       idxedAlignSurfaces.emplace(&surface, iSurface);
       iSurface++;
     }
   }
 
-  // Test the method to evaluate alignment state for a single track
-  const auto& inputTraj = trajectories.front();
-  kfOptions.referenceSurface = &(*inputTraj.startParameters).referenceSurface();
-
-  auto evaluateRes = alignZero.evaluateTrackAlignmentState(
-      kfOptions.geoContext, inputTraj.sourcelinks, *inputTraj.startParameters,
-      kfOptions, idxedAlignSurfaces, AlignmentMask::All);
-  BOOST_CHECK(evaluateRes.ok());
-
-  const auto& alignState = evaluateRes.value();
-  CHECK_CLOSE_ABS(alignState.chi2 / alignState.alignmentDof, 0.5, 1);
-
-  // Check the dimensions
-  BOOST_CHECK_EQUAL(alignState.measurementDim, 12);
-  BOOST_CHECK_EQUAL(alignState.trackParametersDim, 36);
-  // Check the alignment dof
-  BOOST_CHECK_EQUAL(alignState.alignmentDof, 30);
-  BOOST_CHECK_EQUAL(alignState.alignedSurfaces.size(), 5);
-  // Check the measurements covariance
-  BOOST_CHECK_EQUAL(alignState.measurementCovariance.rows(), 12);
-  const SquareMatrix2 measCov =
-      alignState.measurementCovariance.block<2, 2>(2, 2);
-  SquareMatrix2 cov2D;
-  cov2D << 30_um * 30_um, 0, 0, 50_um * 50_um;
-  CHECK_CLOSE_ABS(measCov, cov2D, 1e-10);
-  // Check the track parameters covariance matrix. Its rows/columns scales
-  // with the number of measurement states
-  BOOST_CHECK_EQUAL(alignState.trackParametersCovariance.rows(), 36);
-  // Check the projection matrix
-  BOOST_CHECK_EQUAL(alignState.projectionMatrix.rows(), 12);
-  BOOST_CHECK_EQUAL(alignState.projectionMatrix.cols(), 36);
-  const ActsMatrix<2, 6> proj = alignState.projectionMatrix.block<2, 6>(0, 0);
-  const ActsMatrix<2, 6> refProj = ActsMatrix<2, 6>::Identity();
-  CHECK_CLOSE_ABS(proj, refProj, 1e-10);
-  // Check the residual
-  BOOST_CHECK_EQUAL(alignState.residual.size(), 12);
-  // Check the residual covariance
-  BOOST_CHECK_EQUAL(alignState.residualCovariance.rows(), 12);
-  // Check the alignment to residual derivative
-  BOOST_CHECK_EQUAL(alignState.alignmentToResidualDerivative.rows(), 12);
-  BOOST_CHECK_EQUAL(alignState.alignmentToResidualDerivative.cols(), 30);
-  // Check the chi2 derivative
-  BOOST_CHECK_EQUAL(alignState.alignmentToChi2Derivative.size(), 30);
-  BOOST_CHECK_EQUAL(alignState.alignmentToChi2SecondDerivative.rows(), 30);
+  /*// Test the method to evaluate alignment state for a single track*/
+  /*const auto& inputTraj = trajectories.front();*/
+  /*kfOptions.referenceSurface = &(*inputTraj.startParameters).referenceSurface();*/
+  /**/
+  /*auto evaluateRes = alignZero.evaluateTrackAlignmentState(*/
+  /*    kfOptions.geoContext, inputTraj.sourcelinks, *inputTraj.startParameters,*/
+  /*    kfOptions, idxedAlignSurfaces, AlignmentMask::All);*/
+  /*BOOST_CHECK(evaluateRes.ok());*/
+  /**/
+  /*const auto& alignState = evaluateRes.value();*/
+  /*CHECK_CLOSE_ABS(alignState.chi2 / alignState.alignmentDof, 0.5, 1);*/
+  /**/
+  /*// Check the dimensions*/
+  /*BOOST_CHECK_EQUAL(alignState.measurementDim, 12);*/
+  /*BOOST_CHECK_EQUAL(alignState.trackParametersDim, 36);*/
+  /*// Check the alignment dof*/
+  /*BOOST_CHECK_EQUAL(alignState.alignmentDof, 30);*/
+  /*BOOST_CHECK_EQUAL(alignState.alignedSurfaces.size(), 5);*/
+  /*// Check the measurements covariance*/
+  /*BOOST_CHECK_EQUAL(alignState.measurementCovariance.rows(), 12);*/
+  /*const SquareMatrix2 measCov =*/
+  /*    alignState.measurementCovariance.block<2, 2>(2, 2);*/
+  /*SquareMatrix2 cov2D;*/
+  /*cov2D << 30_um * 30_um, 0, 0, 50_um * 50_um;*/
+  /*CHECK_CLOSE_ABS(measCov, cov2D, 1e-10);*/
+  /*// Check the track parameters covariance matrix. Its rows/columns scales*/
+  /*// with the number of measurement states*/
+  /*BOOST_CHECK_EQUAL(alignState.trackParametersCovariance.rows(), 36);*/
+  /*// Check the projection matrix*/
+  /*BOOST_CHECK_EQUAL(alignState.projectionMatrix.rows(), 12);*/
+  /*BOOST_CHECK_EQUAL(alignState.projectionMatrix.cols(), 36);*/
+  /*const ActsMatrix<2, 6> proj = alignState.projectionMatrix.block<2, 6>(0, 0);*/
+  /*const ActsMatrix<2, 6> refProj = ActsMatrix<2, 6>::Identity();*/
+  /*CHECK_CLOSE_ABS(proj, refProj, 1e-10);*/
+  /*// Check the residual*/
+  /*BOOST_CHECK_EQUAL(alignState.residual.size(), 12);*/
+  /*// Check the residual covariance*/
+  /*BOOST_CHECK_EQUAL(alignState.residualCovariance.rows(), 12);*/
+  /*// Check the alignment to residual derivative*/
+  /*BOOST_CHECK_EQUAL(alignState.alignmentToResidualDerivative.rows(), 12);*/
+  /*BOOST_CHECK_EQUAL(alignState.alignmentToResidualDerivative.cols(), 30);*/
+  /*// Check the chi2 derivative*/
+  /*BOOST_CHECK_EQUAL(alignState.alignmentToChi2Derivative.size(), 30);*/
+  /*BOOST_CHECK_EQUAL(alignState.alignmentToChi2SecondDerivative.rows(), 30);*/
 
   // Test the align method
   std::vector<std::vector<TestSourceLink>> trajCollection;

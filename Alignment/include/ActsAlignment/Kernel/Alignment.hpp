@@ -25,7 +25,6 @@
 #include <map>
 #include <queue>
 #include <vector>
-
 namespace ActsAlignment {
 using AlignedTransformUpdater =
     std::function<bool(Acts::DetectorElementBase*, const Acts::GeometryContext&,

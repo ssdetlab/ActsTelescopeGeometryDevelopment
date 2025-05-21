@@ -177,7 +177,7 @@ BOOST_AUTO_TEST_CASE(EndcapVolumeWithSurfaces) {
   auto dvBuilder = std::make_shared<Acts::Experimental::DetectorVolumeBuilder>(
       dvCfg, Acts::getDefaultLogger("EndcapBuilder", Acts::Logging::VERBOSE));
 
-  auto [volumes, portals, roots] = dvBuilder->construct(tContext);
+  auto [volumes, portals, roots, elements] = dvBuilder->construct(tContext);
   auto volume = volumes.front();
 
   auto jVolume = Acts::DetectorVolumeJsonConverter::toJson(tContext, *volume,
@@ -257,7 +257,7 @@ BOOST_AUTO_TEST_CASE(BarrelVolumeWithSurfaces) {
   auto dvBuilder = std::make_shared<Acts::Experimental::DetectorVolumeBuilder>(
       dvCfg, Acts::getDefaultLogger("EndcapBuilder", Acts::Logging::VERBOSE));
 
-  auto [volumes, portals, roots] = dvBuilder->construct(tContext);
+  auto [volumes, portals, roots, elements] = dvBuilder->construct(tContext);
 
   auto volume = volumes.front();
 

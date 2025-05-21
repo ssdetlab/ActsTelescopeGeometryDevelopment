@@ -162,7 +162,7 @@ BOOST_AUTO_TEST_CASE(CuboidalContainerBuildingXYZVolumes) {
         ccbCfg, Acts::getDefaultLogger("CuboidalContainerBuilder",
                                        Acts::Logging::VERBOSE));
 
-    auto [volumes, portals, roots] = ccBuilder->construct(tContext);
+    auto [volumes, portals, roots, elements] = ccBuilder->construct(tContext);
 
     BOOST_CHECK_EQUAL(portals.size(), 4u);
     BOOST_CHECK_EQUAL(roots.volumes.size(), 2u);

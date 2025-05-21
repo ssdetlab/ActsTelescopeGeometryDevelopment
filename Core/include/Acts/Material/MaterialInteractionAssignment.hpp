@@ -91,6 +91,10 @@ struct Options {
 
   /// Allow re-assignment of the material interaction, e.g. to respect
   GeometryHierarchyMap<ReAssignment> reAssignments = {};
+
+  /// Max distance between the surface and the material interaction
+  /// for the interaction to be assigned
+  double maxDistance = std::numeric_limits<double>::max();
 };
 
 /// @brief Match the material interactions to surfaces intersections while respecting

@@ -72,6 +72,10 @@ class RootMaterialTrackWriter
     /// Collapse consecutive interactions of a single surface into a single
     /// interaction
     bool collapseInteractions = false;
+
+    /// Max distance between the surface and the material interaction
+    /// for the interaction to be assigned
+    double maxDistance = std::numeric_limits<double>::max();
   };
 
   /// Constructor with

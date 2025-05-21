@@ -42,28 +42,32 @@ def runMaterialRecording(
 
     rnd = RandomNumbers(seed=228)
 
-    vertexNoWindow=UniformVertexGenerator(
-        mins=acts.Vector4(-7.4, 173.56, 16560, 0),
-        maxs=acts.Vector4(6.3, 346.1, 16560, 0),
-    )
-    weightNoWindow = 346.1 - 173.56
+    # vertexNoWindow=UniformVertexGenerator(
+        # mins=acts.Vector4(-7.4, 173.56, 16560, 0),
+        # maxs=acts.Vector4(6.3, 346.1, 16560, 0),
+    # )
+    # weightNoWindow = 346.1 - 173.56
     vertexWindow=UniformVertexGenerator(
-        mins=acts.Vector4(-7.4, 75.3, 16548, 0),
-        maxs=acts.Vector4(6.3, 173.56, 16548, 0),
+        mins=acts.Vector4(-6.3, 78.7, 16630, 0),
+        maxs=acts.Vector4(7.5, 108.8, 16630, 0),
     )
-    weightWindow = 173.56 - 75.3
-    weights = [weightNoWindow, weightWindow]
-    vertexGen=CompositeVertexGenerator(
-        [vertexNoWindow, vertexWindow],
-        weights
-    )
+    #vertexWindow=UniformVertexGenerator(
+    #    mins=acts.Vector4(-20, 30, 16630, 0),
+    #    maxs=acts.Vector4(20, 150, 16630, 0),
+    #)
+    # weightWindow = 173.56 - 75.3
+    # weights = [weightNoWindow, weightWindow]
+    # vertexGen=CompositeVertexGenerator(
+        # [vertexNoWindow, vertexWindow],
+        # weights
+    # )
 
     evGen = EventGenerator(
         level=acts.logging.INFO,
         generators=[
             EventGenerator.Generator(
                 multiplicity=FixedMultiplicityGenerator(n=1),
-                vertex=vertexGen,
+                vertex=vertexWindow,
                 particles=ParametricParticleGenerator(
                     pdg=acts.PdgParticle.eInvalid,
                     charge=0,
@@ -96,6 +100,7 @@ def runMaterialRecording(
 
     s.addWriter(
         acts.examples.RootMaterialTrackWriter(
+            maxDistance=500,
             prePostStep=True,
             recalculateTotals=True,
             inputMaterialTracks="material-tracks",

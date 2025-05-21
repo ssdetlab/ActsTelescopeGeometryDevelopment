@@ -10,6 +10,7 @@
 
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Detector/PortalGenerators.hpp"
+#include "Acts/Geometry/DetectorElementBase.hpp"
 #include "Acts/Navigation/InternalNavigation.hpp"
 #include "Acts/Navigation/PortalNavigation.hpp"
 
@@ -59,6 +60,8 @@ struct DetectorComponent {
   PortalContainer portals = {};
   /// The root volumes finder
   RootDetectorVolumes rootVolumes = {};
+  /// Detector elements
+  std::vector<std::shared_ptr<DetectorElementBase>> detectorElemets = {};
 };
 
 /// @brief Holder struct for the external structure components

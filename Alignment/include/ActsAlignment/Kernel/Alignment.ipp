@@ -104,6 +104,8 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
           alignState.alignmentToChi2Derivative.segment(
               srcRow * Acts::eAlignmentSize, Acts::eAlignmentSize);
 
+      /*std::cout << "ALIGNMENT TO CHI2 SECOND DERIVATIVE:\n";*/
+      /*std::cout << alignState.alignmentToChi2SecondDerivative << "\n";*/
       for (const auto& [colSurface, cols] : alignState.alignedSurfaces) {
         const auto& [dstCol, srcCol] = cols;
         sumChi2SecondDerivative
@@ -119,6 +121,10 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
     sumChi2ONdf += alignState.chi2 / alignState.measurementDim;
   }
   alignResult.averageChi2ONdf = sumChi2ONdf / alignResult.numTracks;
+
+  std::cout << "sumChi2SecondDerivative = \n"
+            << sumChi2SecondDerivative << "\n";
+  std::cout << "sumChi2Derivative = \n" << sumChi2Derivative << "\n";
 
   // Get the inverse of chi2 second derivative matrix (we need this to
   // calculate the covariance of the alignment parameters)
@@ -143,6 +149,9 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
   ACTS_VERBOSE("sumChi2SecondDerivative = \n" << sumChi2SecondDerivative);
   ACTS_VERBOSE("sumChi2Derivative = \n" << sumChi2Derivative);
   ACTS_VERBOSE("alignResult.deltaAlignmentParameters \n");
+
+  std::cout << "alignResult.deltaAlignmentParameters\n"
+            << alignResult.deltaAlignmentParameters << "\n";
 
   // Alignment parameters covariance
   alignResult.alignmentCovariance = 2 * sumChi2SecondDerivativeInverse;
@@ -235,7 +244,10 @@ ActsAlignment::Alignment<fitter_t>::align(
   for (unsigned int iIter = 0; iIter < alignOptions.maxIterations; iIter++) {
     // Perform the fit to the trajectories and update alignment parameters
     // Initialize the alignment mask (all dof in default)
-    AlignmentMask alignMask = AlignmentMask::All;
+    // AlignmentMask alignMask = AlignmentMask::All;
+    AlignmentMask alignMask = (AlignmentMask::Center0 | AlignmentMask::Center2 | AlignmentMask::Rotation1);
+    /*AlignmentMask alignMask = (AlignmentMask::Center0 | AlignmentMask::Center2);*/
+    /*AlignmentMask alignMask = AlignmentMask::Center0;*/
     // Set the alignment mask
     auto iter_it = alignOptions.iterationState.find(iIter);
     if (iter_it != alignOptions.iterationState.end()) {

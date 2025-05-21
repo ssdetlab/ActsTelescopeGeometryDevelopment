@@ -265,6 +265,9 @@ ProcessCode RootMaterialTrackWriter::writeT(
 
     // and now loop over the material
     for (const auto& mint : materialInteractions) {
+      if (mint.position.z() > 17000) {
+        continue;
+      }
       auto direction = mint.direction.normalized();
 
       // The material step position information

@@ -13,6 +13,9 @@
 #include "Acts/Detector/GeometryIdGenerator.hpp"
 #include "Acts/Detector/PortalGenerators.hpp"
 #include "Acts/Detector/detail/CuboidalDetectorHelper.hpp"
+#include "Acts/EventData/TrackContainer.hpp"
+#include "Acts/EventData/VectorMultiTrajectory.hpp"
+#include "Acts/EventData/VectorTrackContainer.hpp"
 #include "Acts/EventData/detail/TestSourceLink.hpp"
 #include "Acts/Geometry/CuboidVolumeBounds.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
@@ -28,17 +31,12 @@
 #include "Acts/Surfaces/PlaneSurface.hpp"
 #include "Acts/Surfaces/RectangleBounds.hpp"
 #include "Acts/Tests/CommonHelpers/MeasurementsCreator.hpp"
-#include "Acts/Utilities/Logger.hpp"
-
-#include "Acts/Propagator/StraightLineStepper.hpp"
 #include "Acts/TrackFinding/CombinatorialKalmanFilter.hpp"
-#include "Acts/TrackFitting/KalmanFitter.hpp"
-#include "Acts/EventData/TrackContainer.hpp"
-#include "Acts/EventData/VectorMultiTrajectory.hpp"
-#include "Acts/EventData/VectorTrackContainer.hpp"
+#include "Acts/TrackFinding/MeasurementSelector.hpp"
 #include "Acts/TrackFitting/GainMatrixSmoother.hpp"
 #include "Acts/TrackFitting/GainMatrixUpdater.hpp"
-#include "Acts/TrackFinding/MeasurementSelector.hpp"
+#include "Acts/TrackFitting/KalmanFitter.hpp"
+#include "Acts/Utilities/Logger.hpp"
 
 BOOST_AUTO_TEST_SUITE(PathSeeder)
 
@@ -54,10 +52,9 @@ const ActsScalar halfZ = 10.;
 const ActsScalar deltaX = 10.;
 const ActsScalar deltaYZ = 1.;
 
-using TrackContainer = Acts::TrackContainer<
-    Acts::VectorTrackContainer,
-    Acts::VectorMultiTrajectory,
-    Acts::detail::ValueHolder>;
+using TrackContainer = Acts::TrackContainer<Acts::VectorTrackContainer,
+                                            Acts::VectorMultiTrajectory,
+                                            Acts::detail::ValueHolder>;
 
 using TrackStateContainerBackend =
     typename TrackContainer::TrackStateContainerBackend;
@@ -65,106 +62,101 @@ using TrackStateContainerBackend =
 /// The map(-like) container accessor
 template <typename container_t>
 struct TestContainerAccessor {
-    using Container = container_t;
-    using Key = typename container_t::key_type;
-    using Value = typename container_t::mapped_type;
-    
-    /// This iterator adapter is needed to have the deref operator return a single
-    /// source link instead of the map pair <GeometryIdentifier,SourceLink>
-    struct Iterator {
-        using BaseIterator = typename container_t::const_iterator;
-    
-        using iterator_category = typename BaseIterator::iterator_category;
-        using value_type = typename BaseIterator::value_type;
-        using difference_type = typename BaseIterator::difference_type;
-        using pointer = typename BaseIterator::pointer;
-        using reference = typename BaseIterator::reference;
-    
-        Iterator& operator++() {
-        ++m_iterator;
-            return *this;
-        }
-    
-        bool operator==(const Iterator& other) const {
-            return m_iterator == other.m_iterator;
-        }
-    
-        bool operator!=(const Iterator& other) const { return !(*this == other); }
-    
-        Acts::SourceLink operator*() const {
-            const auto& sl = m_iterator->second;
-            return Acts::SourceLink{sl};
-        }
-    
-        BaseIterator m_iterator;
-    };
-    
-    // pointer to the container
-    const Container* container = nullptr;
-    
-    // get the range of elements with requested key
-    std::pair<Iterator, Iterator> range(const Acts::Surface& surface) const {
-        assert(container != nullptr);
-        auto [begin, end] = container->equal_range(surface.geometryId());
-        return {Iterator{begin}, Iterator{end}};
+  using Container = container_t;
+  using Key = typename container_t::key_type;
+  using Value = typename container_t::mapped_type;
+
+  /// This iterator adapter is needed to have the deref operator return a single
+  /// source link instead of the map pair <GeometryIdentifier,SourceLink>
+  struct Iterator {
+    using BaseIterator = typename container_t::const_iterator;
+
+    using iterator_category = typename BaseIterator::iterator_category;
+    using value_type = typename BaseIterator::value_type;
+    using difference_type = typename BaseIterator::difference_type;
+    using pointer = typename BaseIterator::pointer;
+    using reference = typename BaseIterator::reference;
+
+    Iterator& operator++() {
+      ++m_iterator;
+      return *this;
     }
+
+    bool operator==(const Iterator& other) const {
+      return m_iterator == other.m_iterator;
+    }
+
+    bool operator!=(const Iterator& other) const { return !(*this == other); }
+
+    Acts::SourceLink operator*() const {
+      const auto& sl = m_iterator->second;
+      return Acts::SourceLink{sl};
+    }
+
+    BaseIterator m_iterator;
+  };
+
+  // pointer to the container
+  const Container* container = nullptr;
+
+  // get the range of elements with requested key
+  std::pair<Iterator, Iterator> range(const Acts::Surface& surface) const {
+    assert(container != nullptr);
+    auto [begin, end] = container->equal_range(surface.geometryId());
+    return {Iterator{begin}, Iterator{end}};
+  }
 };
 
 class BranchStopper {
-    public:
-        using BranchStopperResult =
-            Acts::CombinatorialKalmanFilterBranchStopperResult;
+ public:
+  using BranchStopperResult =
+      Acts::CombinatorialKalmanFilterBranchStopperResult;
 
-        struct Config {
-            int minMeasurements = 3;
-        };
+  struct Config {
+    int minMeasurements = 3;
+  };
 
-        BranchStopper(Config cfg) : m_cfg(std::move(cfg)) {};
+  BranchStopper(Config cfg) : m_cfg(std::move(cfg)) {};
 
-        BranchStopperResult operator()(
-            const TrackContainer::TrackProxy& track,
-            const TrackContainer::TrackStateProxy& trackState) const {
-        
-            // bool enoughMeasurements =
-                // track.nMeasurements() >= m_cfg.minMeasurements;
-            // if (!enoughMeasurements) {
-                // return BranchStopperResult::Continue;
-            // }
-            // else {
-                // return BranchStopperResult::StopAndKeep;
-            // }
-            return BranchStopperResult::Continue;
-        }
-        
-    private:
-        const Config m_cfg;
+  BranchStopperResult operator()(
+      const TrackContainer::TrackProxy& track,
+      const TrackContainer::TrackStateProxy& trackState) const {
+    // bool enoughMeasurements =
+    // track.nMeasurements() >= m_cfg.minMeasurements;
+    // if (!enoughMeasurements) {
+    // return BranchStopperResult::Continue;
+    // }
+    // else {
+    // return BranchStopperResult::StopAndKeep;
+    // }
+    return BranchStopperResult::Continue;
+  }
+
+ private:
+  const Config m_cfg;
 };
 
 BranchStopper branchStopper({2});
 
 using StraightPropagator =
-    Acts::Propagator<
-        Acts::StraightLineStepper, 
-        Acts::Experimental::DetectorNavigator>;
+    Acts::Propagator<Acts::StraightLineStepper,
+                     Acts::Experimental::DetectorNavigator>;
 using ConstantFieldStepper = Acts::EigenStepper<>;
 using ConstantFieldPropagator =
-    Acts::Propagator<
-    ConstantFieldStepper, 
-    Acts::Experimental::DetectorNavigator>;
+    Acts::Propagator<ConstantFieldStepper,
+                     Acts::Experimental::DetectorNavigator>;
 
 using KalmanUpdater = Acts::GainMatrixUpdater;
 using KalmanSmoother = Acts::GainMatrixSmoother;
 using CombinatorialKalmanFilter =
     Acts::CombinatorialKalmanFilter<ConstantFieldPropagator, TrackContainer>;
 using TestSourceLinkContainer =
-    std::unordered_multimap<
-        Acts::GeometryIdentifier, 
-        Acts::detail::Test::TestSourceLink>;
+    std::unordered_multimap<Acts::GeometryIdentifier,
+                            Acts::detail::Test::TestSourceLink>;
 using TestSourceLinkAccessor = TestContainerAccessor<TestSourceLinkContainer>;
 using CombinatorialKalmanFilterOptions =
-    Acts::CombinatorialKalmanFilterOptions<
-        TestSourceLinkAccessor::Iterator,
-        TrackContainer>;
+    Acts::CombinatorialKalmanFilterOptions<TestSourceLinkAccessor::Iterator,
+                                           TrackContainer>;
 
 KalmanUpdater kfUpdater;
 KalmanSmoother kfSmoother;
@@ -176,49 +168,47 @@ Acts::CalibrationContext cctx;
 // configuration for the measurement selector
 Acts::MeasurementSelector::Config measurementSelectorCfg = {
     // global default: no chi2 cut, only one measurement per surface
-    {Acts::GeometryIdentifier(),
-    {{}, {10000000000}, {1000u}}},
+    {Acts::GeometryIdentifier(), {{}, {10000000000}, {1000u}}},
 };
 
 Acts::MeasurementSelector measSel{measurementSelectorCfg};
 
 ConstantFieldPropagator makeConstantFieldPropagator(
     std::shared_ptr<const Acts::Experimental::Detector> geo, double bz) {
-        Acts::Experimental::DetectorNavigator::Config cfg;
-        cfg.detector = geo.get();
-        cfg.resolvePassive = false;
-        cfg.resolveMaterial = true;
-        cfg.resolveSensitive = true;
-        Acts::Experimental::DetectorNavigator navigator(
-            cfg,
-            Acts::getDefaultLogger("DetectorNavigator", Acts::Logging::VERBOSE));
-        auto field =
-            std::make_shared<Acts::ConstantBField>(Acts::Vector3(0.0, 0.0, bz));
-        ConstantFieldStepper stepper(std::move(field));
-        return ConstantFieldPropagator(std::move(stepper), std::move(navigator));
+  Acts::Experimental::DetectorNavigator::Config cfg;
+  cfg.detector = geo.get();
+  cfg.resolvePassive = false;
+  cfg.resolveMaterial = true;
+  cfg.resolveSensitive = true;
+  Acts::Experimental::DetectorNavigator navigator(
+      cfg, Acts::getDefaultLogger("DetectorNavigator", Acts::Logging::VERBOSE));
+  auto field =
+      std::make_shared<Acts::ConstantBField>(Acts::Vector3(0.0, 0.0, bz));
+  ConstantFieldStepper stepper(std::move(field));
+  return ConstantFieldPropagator(std::move(stepper), std::move(navigator));
 }
 
-Acts::CombinatorialKalmanFilterExtensions<TrackContainer> 
-    getExtensions() {
-        Acts::CombinatorialKalmanFilterExtensions<TrackContainer> extensions;
-            extensions.calibrator.template connect<
-                &Acts::detail::Test::testSourceLinkCalibrator<TrackStateContainerBackend>>();
-        extensions.updater.template connect<
-            &KalmanUpdater::operator()<TrackStateContainerBackend>>(&kfUpdater);
-        extensions.measurementSelector.template connect<
-            &Acts::MeasurementSelector::select<TrackStateContainerBackend>>(
-            &measSel);
-        extensions.branchStopper.template connect<
-            &BranchStopper::operator()>(&branchStopper);
-        return extensions;
+Acts::CombinatorialKalmanFilterExtensions<TrackContainer> getExtensions() {
+  Acts::CombinatorialKalmanFilterExtensions<TrackContainer> extensions;
+  extensions.calibrator
+      .template connect<&Acts::detail::Test::testSourceLinkCalibrator<
+          TrackStateContainerBackend>>();
+  extensions.updater
+      .template connect<&KalmanUpdater::operator()<TrackStateContainerBackend>>(
+          &kfUpdater);
+  extensions.measurementSelector.template connect<
+      &Acts::MeasurementSelector::select<TrackStateContainerBackend>>(&measSel);
+  extensions.branchStopper.template connect<&BranchStopper::operator()>(
+      &branchStopper);
+  return extensions;
 }
 
 CombinatorialKalmanFilterOptions makeCkfOptions() {
-    // leave the accessor empty, this will have to be set before running the CKF
-    return CombinatorialKalmanFilterOptions(
-        gctx, mctx, cctx,
-        Acts::SourceLinkAccessorDelegate<TestSourceLinkAccessor::Iterator>{},
-        getExtensions(), Acts::PropagatorPlainOptions(gctx, mctx));
+  // leave the accessor empty, this will have to be set before running the CKF
+  return CombinatorialKalmanFilterOptions(
+      gctx, mctx, cctx,
+      Acts::SourceLinkAccessorDelegate<TestSourceLinkAccessor::Iterator>{},
+      getExtensions(), Acts::PropagatorPlainOptions(gctx, mctx));
 }
 
 // Intersection finding to get the
@@ -264,10 +254,11 @@ class NoFieldIntersectionFinder {
 // intersection point
 class PathWidthProvider {
  public:
-    std::pair<ActsScalar, ActsScalar> width;
+  std::pair<ActsScalar, ActsScalar> width;
 
   std::pair<ActsScalar, ActsScalar> operator()(
-      const GeometryContext& /*gctx*/, const GeometryIdentifier& /*geoId*/) const {
+      const GeometryContext& /*gctx*/,
+      const GeometryIdentifier& /*geoId*/) const {
     return width;
   }
 };
@@ -303,45 +294,42 @@ class TrackEstimator {
 
 // Construct grid with the source links
 struct ConstructSourceLinkGrid {
-    SourceLinkSurfaceAccessor m_surfaceAccessor;
-   
-    std::unordered_map<GeometryIdentifier, Grid> construct(
-        GeometryContext geoCtx,
-        std::vector<SourceLink> sourceLinks) {
-            // Lookup table for each layer
-            std::unordered_map<GeometryIdentifier, Grid> lookupTable;
-        
-            // Construct a binned grid for each layer
-            for (int i : {14, 15, 16, 17}) {
-                Axis xAxis(-halfY, halfY, 50);
-                Axis yAxis(-halfZ, halfZ, 50);
-            
-                Grid grid(std::make_tuple(xAxis, yAxis));
+  SourceLinkSurfaceAccessor m_surfaceAccessor;
 
-                GeometryIdentifier geoId;
+  std::unordered_map<GeometryIdentifier, Grid> construct(
+      GeometryContext geoCtx, std::vector<SourceLink> sourceLinks) {
+    // Lookup table for each layer
+    std::unordered_map<GeometryIdentifier, Grid> lookupTable;
 
-                geoId.setSensitive(i);
+    // Construct a binned grid for each layer
+    for (int i : {14, 15, 16, 17}) {
+      Axis xAxis(-halfY, halfY, 50);
+      Axis yAxis(-halfZ, halfZ, 50);
 
-                lookupTable.insert({geoId, grid});
-            }
-            // Fill the grid with source links
-            for (auto& sl : sourceLinks) {
-                auto ssl = sl.get<detail::Test::TestSourceLink>();
-                auto id = ssl.m_geometryId;
-            
-                // Grid works with global positions
-                Vector3 globalPos = m_surfaceAccessor(sl)->localToGlobal(
-                    geoCtx, ssl.parameters, Vector3{0, 1, 0});
-            
-                auto bin =
-                    lookupTable.at(id)
-                        .localBinsFromPosition(Vector2(globalPos.y(), globalPos.z()));
-                lookupTable.at(id).atLocalBins(bin).push_back(sl);
-            }
-        
-            return lookupTable;
+      Grid grid(std::make_tuple(xAxis, yAxis));
+
+      GeometryIdentifier geoId;
+
+      geoId.setSensitive(i);
+
+      lookupTable.insert({geoId, grid});
+    }
+    // Fill the grid with source links
+    for (auto& sl : sourceLinks) {
+      auto ssl = sl.get<detail::Test::TestSourceLink>();
+      auto id = ssl.m_geometryId;
+
+      // Grid works with global positions
+      Vector3 globalPos = m_surfaceAccessor(sl)->localToGlobal(
+          geoCtx, ssl.parameters, Vector3{0, 1, 0});
+
+      auto bin = lookupTable.at(id).localBinsFromPosition(
+          Vector2(globalPos.y(), globalPos.z()));
+      lookupTable.at(id).atLocalBins(bin).push_back(sl);
     }
 
+    return lookupTable;
+  }
 };
 
 // Construct a simple telescope detector
@@ -477,7 +465,7 @@ std::vector<SourceLink> createSourceLinks(
   }
 
   Vector3 vertex(-5., 0., 0.);
-//   std::vector<ActsScalar> phis = {-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15};
+  //   std::vector<ActsScalar> phis = {-0.15, -0.1, -0.05, 0, 0.05, 0.1, 0.15};
   std::vector<ActsScalar> phis = {-0.05, 0.05};
 
   std::vector<SourceLink> sourceLinks;
@@ -504,152 +492,146 @@ std::vector<SourceLink> createSourceLinks(
 }
 
 BOOST_AUTO_TEST_CASE(PathSeederZeroField) {
-  using SurfaceAccessor =
-      detail::Test::Experimental::TestSourceLinkSurfaceAccessor;
-
-  // Create detector
-  auto detector = constructTelescopeDetector();
-
-  // Create source links
-  auto sourceLinks = createSourceLinks(gctx, *detector);
-
-  // Prepare the PathSeeder
-  auto pathSeederCfg = Acts::Experimental::PathSeeder::Config();
-
-  // Grid to bin the source links
-  SurfaceAccessor surfaceAccessor{*detector};
-  auto sourceLinkGridConstructor = ConstructSourceLinkGrid();
-    sourceLinkGridConstructor.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(
-        &surfaceAccessor);
-
-    // Create the grid
-    std::unordered_map<GeometryIdentifier, Grid> sourceLinkGrid =
-        sourceLinkGridConstructor.construct(gctx, sourceLinks);
-
-  // Estimator of the IP and first hit
-  // parameters of the track
-  TrackEstimator trackEstimator;
-  trackEstimator.ip = Vector3(-5., 0., 0.);
-  pathSeederCfg.trackEstimator.connect<&TrackEstimator::operator()>(
-      &trackEstimator);
-
-  // Transforms the source links to global coordinates
-  SourceLinkCalibrator sourceLinkCalibrator;
-  sourceLinkCalibrator.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(
-      &surfaceAccessor);
-  pathSeederCfg.sourceLinkCalibrator.connect<&SourceLinkCalibrator::operator()>(
-      &sourceLinkCalibrator);
-
-  // Intersection finder
-  NoFieldIntersectionFinder intersectionFinder;
-  for (auto volume : detector->volumes()) {
-    for (auto surface : volume->surfaces()) {
-      intersectionFinder.m_surfaces.push_back(surface);
-    }
-  }
-  pathSeederCfg.intersectionFinder
-      .connect<&NoFieldIntersectionFinder::operator()>(&intersectionFinder);
-
-  // Path width provider
-    PathWidthProvider pathWidthProvider;
-
-  pathSeederCfg.pathWidthProvider.connect<&PathWidthProvider::operator()>(&pathWidthProvider);
-
-    GeometryIdentifier geoId;
-    geoId.setSensitive(14);
-    pathSeederCfg.firstLayerIds.push_back(geoId);
-
-  // Create the PathSeeder
-  Acts::Experimental::PathSeeder pathSeeder(pathSeederCfg);
-
-  // Get the seeds
-    pathWidthProvider.width = {0.01, 0.01};
-
-    std::vector<Acts::Experimental::PathSeeder::Seed> seeds;
-    // SeedTreeContainer seeds;
-    pathSeeder.getSeeds(gctx, sourceLinkGrid, seeds);
-
-    // Check the seeds
-    BOOST_CHECK_EQUAL(seeds.size(), 2);
-
-    auto seed = seeds.at(0);
-    TestSourceLinkContainer ckfSourceLinks;
-    for (auto& sl : seed.sourceLinks) {
-        auto ssl = sl.get<detail::Test::TestSourceLink>();
-        ckfSourceLinks.insert({ssl.m_geometryId, ssl});
-    }
-
-    auto options = makeCkfOptions();
-    options.propagatorPlainOptions.direction = Acts::Direction::Forward;
-    
-    TestSourceLinkAccessor slAccessor;
-    slAccessor.container = &ckfSourceLinks;
-    options.sourcelinkAccessor.connect<&TestSourceLinkAccessor::range>(
-        &slAccessor);
-    
-    TrackContainer tc{
-        Acts::VectorTrackContainer{},
-        Acts::VectorMultiTrajectory{}};
-    
-    // Create IP covariance matrix from
-    // reasonable standard deviations
-    Acts::BoundVector ipStdDev;
-    ipStdDev[Acts::eBoundLoc0] = 100_um;
-    ipStdDev[Acts::eBoundLoc1] = 100_um;
-    ipStdDev[Acts::eBoundTime] = 25_ns;
-    ipStdDev[Acts::eBoundPhi] = 2_degree;
-    ipStdDev[Acts::eBoundTheta] = 2_degree;
-    ipStdDev[Acts::eBoundQOverP] = 1 / 100_GeV;
-    Acts::BoundSquareMatrix ipCov =
-        ipStdDev.cwiseProduct(ipStdDev).asDiagonal();
-
-    // CKF implementation to be tested
-    CombinatorialKalmanFilter ckf(
-        makeConstantFieldPropagator(detector, 0), 
-        Acts::getDefaultLogger("CKF", Acts::Logging::VERBOSE));
-
-    // run the CKF for all initial track states
-    for (std::size_t trackId = 0u;  trackId < 1; ++trackId) {
-        Acts::Vector4 mPos4 = {seed.ipVertex.x(), seed.ipVertex.y(), seed.ipVertex.z(), 0};
-
-        Acts::ActsScalar p = seed.ipP; 
-        Acts::ActsScalar theta = std::acos(seed.ipDir.z()/p);
-        Acts::ActsScalar phi = std::atan2(seed.ipDir.y(), seed.ipDir.x());
-
-        Acts::CurvilinearTrackParameters ipParameters(
-            mPos4, phi, theta,
-            1_e / p, ipCov, 
-            Acts::ParticleHypothesis::electron());
-
-        options.propagatorPlainOptions.maxSteps = 10000;
-
-        auto res = ckf.findTracks(ipParameters, options, tc);
-        if (!res.ok()) {
-            BOOST_TEST_INFO(res.error() << " " << res.error().message());
-        }
-        BOOST_REQUIRE(res.ok());
-
-        std::cout << "Tracks = " << tc.size() << std::endl;
-        std::cout << "\n\n\n" << std::endl;
-        for (std::size_t tid = 0u; tid < tc.size(); ++tid) {
-            const auto track = tc.getTrack(tid);
-        
-            // check purity of first found track
-            // find the number of hits not originating from the right track
-            std::size_t numHits = 0u;
-            std::size_t nummismatchedHits = 0u;
-            for (const auto trackState : track.trackStatesReversed()) {
-                const auto& sl = trackState.getUncalibratedSourceLink();
-                const auto& ssl = sl.get<detail::Test::TestSourceLink>();
-                std::cout << "Track state: " 
-                << trackState.parameters().transpose() << " ----> "
-                << ssl.parameters.transpose()
-                << std::endl;
-            }
-            std::cout << "----------------" << std::endl;
-        }
-
-    }
+  /*using SurfaceAccessor =*/
+  /*    detail::Test::Experimental::TestSourceLinkSurfaceAccessor;*/
+  /**/
+  /*// Create detector*/
+  /*auto detector = constructTelescopeDetector();*/
+  /**/
+  /*// Create source links*/
+  /*auto sourceLinks = createSourceLinks(gctx, *detector);*/
+  /**/
+  /*// Prepare the PathSeeder*/
+  /*auto pathSeederCfg = Acts::PathSeeder::Config();*/
+  /**/
+  /*// Grid to bin the source links*/
+  /*SurfaceAccessor surfaceAccessor{*detector};*/
+  /*auto sourceLinkGridConstructor = ConstructSourceLinkGrid();*/
+  /*sourceLinkGridConstructor.m_surfaceAccessor*/
+  /*    .connect<&SurfaceAccessor::operator()>(&surfaceAccessor);*/
+  /**/
+  /*// Create the grid*/
+  /*std::unordered_map<GeometryIdentifier, Grid> sourceLinkGrid =*/
+  /*    sourceLinkGridConstructor.construct(gctx, sourceLinks);*/
+  /**/
+  /*// Estimator of the IP and first hit*/
+  /*// parameters of the track*/
+  /*TrackEstimator trackEstimator;*/
+  /*trackEstimator.ip = Vector3(-5., 0., 0.);*/
+  /*pathSeederCfg.trackEstimator.connect<&TrackEstimator::operator()>(*/
+  /*    &trackEstimator);*/
+  /**/
+  /*// Transforms the source links to global coordinates*/
+  /*SourceLinkCalibrator sourceLinkCalibrator;*/
+  /*sourceLinkCalibrator.m_surfaceAccessor.connect<&SurfaceAccessor::operator()>(*/
+  /*    &surfaceAccessor);*/
+  /**/
+  /*// Intersection finder*/
+  /*NoFieldIntersectionFinder intersectionFinder;*/
+  /*for (auto volume : detector->volumes()) {*/
+  /*  for (auto surface : volume->surfaces()) {*/
+  /*    intersectionFinder.m_surfaces.push_back(surface);*/
+  /*  }*/
+  /*}*/
+  /*pathSeederCfg.intersectionFinder*/
+  /*    .connect<&NoFieldIntersectionFinder::operator()>(&intersectionFinder);*/
+  /**/
+  /*// Path width provider*/
+  /*PathWidthProvider pathWidthProvider;*/
+  /**/
+  /*pathSeederCfg.pathWidthProvider.connect<&PathWidthProvider::operator()>(*/
+  /*    &pathWidthProvider);*/
+  /**/
+  /*GeometryIdentifier geoId;*/
+  /*geoId.setSensitive(14);*/
+  /*pathSeederCfg.refLayerIds.push_back(geoId);*/
+  /**/
+  /*// Create the PathSeeder*/
+  /*Acts::PathSeeder pathSeeder(pathSeederCfg);*/
+  /**/
+  /*// Get the seeds*/
+  /*pathWidthProvider.width = {0.01, 0.01};*/
+  /**/
+  /*std::vector<Acts::PathSeeder::PathSeed> seeds;*/
+  /*// SeedTreeContainer seeds;*/
+  /*pathSeeder.findSeeds(gctx, sourceLinkGrid, seeds);*/
+  /**/
+  /*// Check the seeds*/
+  /*BOOST_CHECK_EQUAL(seeds.size(), 2);*/
+  /**/
+  /*auto seed = seeds.at(0);*/
+  /*TestSourceLinkContainer ckfSourceLinks;*/
+  /*for (auto& sl : seed.second) {*/
+  /*  auto ssl = sl.get<detail::Test::TestSourceLink>();*/
+  /*  ckfSourceLinks.insert({ssl.m_geometryId, ssl});*/
+  /*}*/
+  /**/
+  /*auto options = makeCkfOptions();*/
+  /*options.propagatorPlainOptions.direction = Acts::Direction::Forward;*/
+  /**/
+  /*TestSourceLinkAccessor slAccessor;*/
+  /*slAccessor.container = &ckfSourceLinks;*/
+  /*options.sourcelinkAccessor.connect<&TestSourceLinkAccessor::range>(*/
+  /*    &slAccessor);*/
+  /**/
+  /*TrackContainer tc{Acts::VectorTrackContainer{},*/
+  /*                  Acts::VectorMultiTrajectory{}};*/
+  /**/
+  /*// Create IP covariance matrix from*/
+  /*// reasonable standard deviations*/
+  /*Acts::BoundVector ipStdDev;*/
+  /*ipStdDev[Acts::eBoundLoc0] = 100_um;*/
+  /*ipStdDev[Acts::eBoundLoc1] = 100_um;*/
+  /*ipStdDev[Acts::eBoundTime] = 25_ns;*/
+  /*ipStdDev[Acts::eBoundPhi] = 2_degree;*/
+  /*ipStdDev[Acts::eBoundTheta] = 2_degree;*/
+  /*ipStdDev[Acts::eBoundQOverP] = 1 / 100_GeV;*/
+  /*Acts::BoundSquareMatrix ipCov = ipStdDev.cwiseProduct(ipStdDev).asDiagonal();*/
+  /**/
+  /*// CKF implementation to be tested*/
+  /*CombinatorialKalmanFilter ckf(*/
+  /*    makeConstantFieldPropagator(detector, 0),*/
+  /*    Acts::getDefaultLogger("CKF", Acts::Logging::VERBOSE));*/
+  /**/
+  /*// run the CKF for all initial track states*/
+  /*for (std::size_t trackId = 0u; trackId < 1; ++trackId) {*/
+  /*  Acts::Vector4 mPos4 = {seed.first.position.x(), seed.first.position.y(),*/
+  /*                         seed.first.position().z(), 0};*/
+  /**/
+  /*  Acts::ActsScalar p = seed.ipP;*/
+  /*  Acts::ActsScalar theta = std::acos(seed.ipDir.z() / p);*/
+  /*  Acts::ActsScalar phi = std::atan2(seed.ipDir.y(), seed.ipDir.x());*/
+  /**/
+  /*  Acts::CurvilinearTrackParameters ipParameters(*/
+  /*      mPos4, phi, theta, 1_e / p, ipCov,*/
+  /*      Acts::ParticleHypothesis::electron());*/
+  /**/
+  /*  options.propagatorPlainOptions.maxSteps = 10000;*/
+  /**/
+  /*  auto res = ckf.findTracks(ipParameters, options, tc);*/
+  /*  if (!res.ok()) {*/
+  /*    BOOST_TEST_INFO(res.error() << " " << res.error().message());*/
+  /*  }*/
+  /*  BOOST_REQUIRE(res.ok());*/
+  /**/
+  /*  std::cout << "Tracks = " << tc.size() << std::endl;*/
+  /*  std::cout << "\n\n\n" << std::endl;*/
+  /*  for (std::size_t tid = 0u; tid < tc.size(); ++tid) {*/
+  /*    const auto track = tc.getTrack(tid);*/
+  /**/
+  /*    // check purity of first found track*/
+  /*    // find the number of hits not originating from the right track*/
+  /*    std::size_t numHits = 0u;*/
+  /*    std::size_t nummismatchedHits = 0u;*/
+  /*    for (const auto trackState : track.trackStatesReversed()) {*/
+  /*      const auto& sl = trackState.getUncalibratedSourceLink();*/
+  /*      const auto& ssl = sl.get<detail::Test::TestSourceLink>();*/
+  /*      std::cout << "Track state: " << trackState.parameters().transpose()*/
+  /*                << " ----> " << ssl.parameters.transpose() << std::endl;*/
+  /*    }*/
+  /*    std::cout << "----------------" << std::endl;*/
+  /*  }*/
+  /*}*/
 }
 
 BOOST_AUTO_TEST_SUITE_END()

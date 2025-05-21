@@ -12,6 +12,8 @@
 #include "Acts/Utilities/detail/ReferenceWrapperAnyCompat.hpp"
 
 #include "Acts/Definitions/Algebra.hpp"
+#include "Acts/Detector/DetectorVolume.hpp"
+#include "Acts/Detector/Portal.hpp"
 #include "Acts/EventData/MeasurementHelpers.hpp"
 #include "Acts/EventData/MultiTrajectory.hpp"
 #include "Acts/EventData/MultiTrajectoryHelpers.hpp"
@@ -23,11 +25,11 @@
 #include "Acts/Geometry/TrackingVolume.hpp"
 #include "Acts/MagneticField/MagneticFieldContext.hpp"
 #include "Acts/Material/MaterialSlab.hpp"
+#include "Acts/Navigation/DetectorNavigator.hpp"
 #include "Acts/Propagator/AbortList.hpp"
 #include "Acts/Propagator/ActionList.hpp"
 #include "Acts/Propagator/ConstrainedStep.hpp"
 #include "Acts/Propagator/DirectNavigator.hpp"
-#include "Acts/Propagator/Navigator.hpp"
 #include "Acts/Propagator/Propagator.hpp"
 #include "Acts/Propagator/StandardAborters.hpp"
 #include "Acts/Propagator/StraightLineStepper.hpp"
@@ -90,10 +92,10 @@ struct Gx2FitterExtensions {
 
   /// Default constructor which connects the default void components
   Gx2FitterExtensions() {
-    calibrator.template connect<&detail::voidFitterCalibrator<traj_t>>();
-    updater.template connect<&detail::voidFitterUpdater<traj_t>>();
-    outlierFinder.template connect<&detail::voidOutlierFinder<traj_t>>();
-    surfaceAccessor.connect<&detail::voidSurfaceAccessor>();
+    calibrator.template connect<&Acts::detail::voidFitterCalibrator<traj_t>>();
+    updater.template connect<&Acts::detail::voidFitterUpdater<traj_t>>();
+    outlierFinder.template connect<&Acts::detail::voidOutlierFinder<traj_t>>();
+    surfaceAccessor.connect<&Acts::detail::voidSurfaceAccessor>();
   }
 };
 
@@ -225,7 +227,7 @@ struct Gx2FitterResult {
 
   // Monitor which volume we start in. We do not allow to switch the start of a
   // following iteration in a different volume.
-  const TrackingVolume* startVolume = nullptr;
+  const Acts::Experimental::DetectorVolume* startVolume = nullptr;
 };
 
 /// @brief Process measurements and fill the aMatrix and bVector
@@ -413,7 +415,7 @@ class Gx2Fitter {
 
     /// Monitor which volume we start in. We do not allow to switch the start of
     /// a following iteration in a different volume.
-    const TrackingVolume* startVolume = nullptr;
+    const Acts::Experimental::DetectorVolume* startVolume = nullptr;
 
     /// @brief Gx2f actor operation
     ///
@@ -454,8 +456,8 @@ class Gx2Fitter {
       if (startVolume != nullptr &&
           startVolume != state.navigation.startVolume) {
         ACTS_INFO("The update pushed us to a new volume from '"
-                  << startVolume->volumeName() << "' to '"
-                  << state.navigation.startVolume->volumeName()
+                  << startVolume->name() << "' to '"
+                  << state.navigation.startVolume->name()
                   << "'. Starting to abort.");
         result.result = Result<void>(
             Experimental::GlobalChiSquareFitterError::UpdatePushedToNewVolume);
@@ -463,15 +465,6 @@ class Gx2Fitter {
         return;
       }
       result.startVolume = state.navigation.startVolume;
-
-      // Add the measurement surfaces. We will try to hit those
-      // surfaces by ignoring boundary checks.
-      if (state.navigation.options.measurementSurfaces.size() == 0) {
-        for (auto measurementIt = inputMeasurements->begin();
-             measurementIt != inputMeasurements->end(); measurementIt++) {
-          state.navigation.options.insertMeasurementSurface(measurementIt->first);
-        }
-      }
 
       // Update:
       // - Waiting for a current surface
@@ -765,7 +758,7 @@ class Gx2Fitter {
 
     // Monitor which volume we start in. We do not allow to switch the start of
     // a following iteration in a different volume.
-    const TrackingVolume* startVolume = nullptr;
+    const Acts::Experimental::DetectorVolume* startVolume = nullptr;
 
     ACTS_VERBOSE("params:\n" << params);
 
@@ -799,6 +792,16 @@ class Gx2Fitter {
       gx2fActor.startVolume = startVolume;
 
       auto propagatorState = m_propagator.makeState(params, propagatorOptions);
+
+      // Add the measurement surfaces. We will try to hit those
+      // surfaces by ignoring boundary checks.
+      if (propagatorState.navigation.options.measurementSurfaces.size() == 0) {
+        for (auto measurementIt = inputMeasurements.begin();
+             measurementIt != inputMeasurements.end(); measurementIt++) {
+          propagatorState.navigation.options.insertMeasurementSurface(
+              measurementIt->first);
+        }
+      }
 
       auto& r = propagatorState.template get<Gx2FitterResult<traj_t>>();
       r.fittedStates = &trajectoryTempBackend;

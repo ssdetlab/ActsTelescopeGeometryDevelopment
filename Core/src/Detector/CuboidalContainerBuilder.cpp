@@ -14,6 +14,7 @@
 #include "Acts/Detector/detail/CuboidalDetectorHelper.hpp"
 #include "Acts/Detector/interface/IGeometryIdGenerator.hpp"
 #include "Acts/Detector/interface/IRootVolumeFinderBuilder.hpp"
+#include "Acts/Geometry/DetectorElementBase.hpp"
 #include "Acts/Navigation/DetectorVolumeFinders.hpp"
 
 #include <algorithm>
@@ -72,6 +73,7 @@ Acts::Experimental::CuboidalContainerBuilder::CuboidalContainerBuilder(
       dvCfg.name = child->name;
       dvCfg.externalsBuilder = vsBuilder;
       dvCfg.internalsBuilder = child->internalsBuilder;
+      dvCfg.detectorElementBuilder = child->detectorElementBuilder;
       dvCfg.auxiliary = "*** acts auto-generated volume builder ***";
       // Add the builder
       m_cfg.builders.push_back(std::make_shared<DetectorVolumeBuilder>(
@@ -125,10 +127,12 @@ Acts::Experimental::CuboidalContainerBuilder::construct(
   std::vector<std::shared_ptr<DetectorVolume>> volumes;
   std::vector<DetectorComponent::PortalContainer> containers;
   std::vector<std::shared_ptr<DetectorVolume>> rootVolumes;
+  std::vector<std::shared_ptr<DetectorElementBase>> detectorElements;
   // Run through the builders
   std::for_each(
       m_cfg.builders.begin(), m_cfg.builders.end(), [&](const auto& builder) {
-        auto [cVolumes, cContainer, cRoots] = builder->construct(gctx);
+        auto [cVolumes, cContainer, cRoots, cElements] =
+            builder->construct(gctx);
         atNavigationLevel = (atNavigationLevel && cVolumes.size() == 1u);
         ACTS_VERBOSE("Number of volumes: " << cVolumes.size());
         // Collect individual components, volumes, containers, roots
@@ -136,6 +140,8 @@ Acts::Experimental::CuboidalContainerBuilder::construct(
         containers.push_back(cContainer);
         rootVolumes.insert(rootVolumes.end(), cRoots.volumes.begin(),
                            cRoots.volumes.end());
+        detectorElements.insert(detectorElements.end(), cElements.begin(),
+                                cElements.end());
       });
   // Navigation level detected, connect volumes (cleaner and faster than
   // connect containers)
@@ -184,10 +190,12 @@ Acts::Experimental::CuboidalContainerBuilder::construct(
         volumes, rContainer,
         RootDetectorVolumes{
             rootVolumes,
-            m_cfg.rootVolumeFinderBuilder->construct(gctx, rootVolumes)}};
+            m_cfg.rootVolumeFinderBuilder->construct(gctx, rootVolumes)},
+        detectorElements};
   }
 
   // Return the container
   return Acts::Experimental::DetectorComponent{
-      volumes, rContainer, RootDetectorVolumes{rootVolumes, tryRootVolumes()}};
+      volumes, rContainer, RootDetectorVolumes{rootVolumes, tryRootVolumes()},
+      detectorElements};
 }

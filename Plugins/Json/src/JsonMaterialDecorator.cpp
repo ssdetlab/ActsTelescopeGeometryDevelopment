@@ -16,9 +16,12 @@
 
 #include "Acts/Plugins/Json/JsonMaterialDecorator.hpp"
 
+#include "Acts/Material/BinnedSurfaceMaterial.hpp"
 #include "Acts/Material/HomogeneousSurfaceMaterial.hpp"
+#include "Acts/Material/ISurfaceMaterial.hpp"
 
 #include <algorithm>
+#include <memory>
 
 namespace Acts {
 

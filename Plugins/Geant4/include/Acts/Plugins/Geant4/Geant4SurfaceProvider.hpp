@@ -133,6 +133,14 @@ class Geant4SurfaceProvider : public Acts::Experimental::ISurfacesProvider {
 
     auto surfaces = g4SurfaceCache.passiveSurfaces;
 
+    for (const auto& surf : surfaces) {
+      std::cout << surf->center(gctx).transpose() << "   "
+                << surf->normal(gctx, surf->center(gctx),
+                                Acts::Vector3(1, 0, 0))
+                       .transpose()
+                << std::endl;
+    }
+
     /// If range is degenerate, return all surfaces
     if (m_kdtOptions.range.degenerate()) {
       return surfaces;
