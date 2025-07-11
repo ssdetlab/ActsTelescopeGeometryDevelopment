@@ -179,6 +179,7 @@ class PathSeeder {
           // Add the seed to the collection
           Acts::detail::pushBackOrInsertAtEnd(seedCollection, seed);
         }
+        k++;
       }
     }
   }

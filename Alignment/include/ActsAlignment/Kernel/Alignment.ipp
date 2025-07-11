@@ -245,9 +245,11 @@ ActsAlignment::Alignment<fitter_t>::align(
     // Perform the fit to the trajectories and update alignment parameters
     // Initialize the alignment mask (all dof in default)
     // AlignmentMask alignMask = AlignmentMask::All;
-    AlignmentMask alignMask = (AlignmentMask::Center0 | AlignmentMask::Center2 | AlignmentMask::Rotation1);
+    
+    AlignmentMask alignMask = (AlignmentMask::Center0 | AlignmentMask::Center2 | AlignmentMask::Rotation2);
     /*AlignmentMask alignMask = (AlignmentMask::Center0 | AlignmentMask::Center2);*/
     /*AlignmentMask alignMask = AlignmentMask::Center0;*/
+
     // Set the alignment mask
     auto iter_it = alignOptions.iterationState.find(iIter);
     if (iter_it != alignOptions.iterationState.end()) {
