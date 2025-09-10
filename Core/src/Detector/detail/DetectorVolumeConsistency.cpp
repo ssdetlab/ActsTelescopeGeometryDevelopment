@@ -10,6 +10,7 @@
 
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Detector/DetectorVolume.hpp"
+#include "Acts/Utilities/BinningType.hpp"
 #include "Acts/Utilities/StringHelpers.hpp"
 
 #include <stdexcept>
@@ -44,9 +45,34 @@ Acts::Experimental::detail::DetectorVolumeConsistency::checkCenterAlignment(
   // First it needs to surfive the rotation check
   checkRotationAlignment(gctx, volumes);
 
-  // Get the reference axis
-  Vector3 refAxis =
-      volumes[0u]->transform(gctx).rotation().col(toUnderlying(axisValue));
+  // ------------------------------------
+  // E320 Sim part
+  //
+  // // Get the reference axis
+  // Vector3 refAxis =
+  //     volumes[0u]->transform(gctx).rotation().col(toUnderlying(axisValue));
+  // ------------------------------------
+
+  // ------------------------------------
+  // Apollon part
+
+  Vector3 refAxis(0, 0, 0);
+  switch (axisValue) {
+    case BinningValue::binX:
+      refAxis = Vector3::UnitX();
+      break;
+    case BinningValue::binY:
+      refAxis = Vector3::UnitY();
+      break;
+    case BinningValue::binZ:
+      refAxis = Vector3::UnitZ();
+      break;
+    default:
+      throw std::runtime_error(
+          "Checking alignment for unsuporrted binning value");
+      break;
+  }
+  // ------------------------------------
 
   for (auto [iv, v] : enumerate(volumes)) {
     if (iv > 0) {

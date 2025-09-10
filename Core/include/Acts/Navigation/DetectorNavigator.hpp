@@ -417,7 +417,8 @@ class DetectorNavigator {
   std::string posInfo(const propagator_state_t& state,
                       const stepper_t& stepper) const {
     std::stringstream ss;
-    ss << stepper.position(state.stepping).transpose();
+    ss << stepper.position(state.stepping).transpose() << " ";
+    ss << stepper.momentum(state.stepping).transpose();
     ss << " | ";
     return ss.str();
   }
