@@ -19,6 +19,7 @@
 #include "Acts/Utilities/Logger.hpp"
 #include "Acts/Utilities/Result.hpp"
 #include "ActsAlignment/Kernel/AlignmentError.hpp"
+#include "ActsAlignment/Kernel/AlignmentMask.hpp"
 #include "ActsAlignment/Kernel/detail/AlignmentEngine.hpp"
 
 #include <limits>
@@ -29,6 +30,9 @@ namespace ActsAlignment {
 using AlignedTransformUpdater =
     std::function<bool(Acts::DetectorElementBase*, const Acts::GeometryContext&,
                        const Acts::Transform3&)>;
+
+enum struct AlignmentMode : int { local = 0, global = 1 };
+
 ///
 /// @brief Options for align() call
 ///
@@ -54,15 +58,16 @@ struct AlignmentOptions {
       const std::vector<Acts::DetectorElementBase*>& aDetElements = {},
       double chi2CutOff = 0.5,
       const std::pair<std::size_t, double>& deltaChi2CutOff = {5, 0.01},
-      std::size_t maxIters = 5,
-      const std::map<unsigned int, AlignmentMask>& iterState = {})
+      std::size_t maxIters = 5, AlignmentMask mask = AlignmentMask::All,
+      AlignmentMode mode = AlignmentMode::local)
       : fitOptions(fOptions),
         alignedTransformUpdater(aTransformUpdater),
         alignedDetElements(aDetElements),
         averageChi2ONdfCutOff(chi2CutOff),
         deltaAverageChi2ONdfCutOff(deltaChi2CutOff),
         maxIterations(maxIters),
-        iterationState(iterState) {}
+        alignmentMask(mask),
+        alignmentMode(mode) {}
 
   // The fit options
   fit_options_t fitOptions;
@@ -83,8 +88,11 @@ struct AlignmentOptions {
   // The maximum number of iterations to run alignment
   std::size_t maxIterations = 5;
 
-  // The alignment mask for different iterations
-  std::map<unsigned int, AlignmentMask> iterationState;
+  // The alignment mask
+  AlignmentMask alignmentMask;
+
+  // The alignment mode
+  ActsAlignment::AlignmentMode alignmentMode;
 };
 
 /// @brief Alignment result struct
@@ -185,7 +193,8 @@ struct Alignment {
       const trajectory_container_t& trajectoryCollection,
       const start_parameters_container_t& startParametersCollection,
       const fit_options_t& fitOptions, AlignmentResult& alignResult,
-      const AlignmentMask& alignMask = AlignmentMask::All) const;
+      const AlignmentMask& alignMask = AlignmentMask::All,
+      const AlignmentMode& alignMode = AlignmentMode::local) const;
 
   /// @brief update the detector element alignment parameters
   ///

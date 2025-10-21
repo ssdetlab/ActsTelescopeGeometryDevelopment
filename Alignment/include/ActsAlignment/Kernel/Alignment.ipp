@@ -8,6 +8,8 @@
 
 #include "Acts/EventData/VectorMultiTrajectory.hpp"
 #include "Acts/EventData/VectorTrackContainer.hpp"
+#include "ActsAlignment/Kernel/Alignment.hpp"
+#include "ActsAlignment/Kernel/AlignmentMask.hpp"
 
 template <typename fitter_t>
 template <typename source_link_t, typename start_parameters_t,
@@ -58,8 +60,8 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
     const trajectory_container_t& trajectoryCollection,
     const start_parameters_container_t& startParametersCollection,
     const fit_options_t& fitOptions,
-    ActsAlignment::AlignmentResult& alignResult,
-    const ActsAlignment::AlignmentMask& alignMask) const {
+    ActsAlignment::AlignmentResult& alignResult, const AlignmentMask& alignMask,
+    const ActsAlignment::AlignmentMode& alignMode) const {
   // The number of trajectories must be equal to the number of starting
   // parameters
   assert(trajectoryCollection.size() == startParametersCollection.size());
@@ -135,122 +137,65 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
   }
 
   //-----------------------------------------------------------------------------
+  alignResult.deltaAlignmentParameters =
+      Acts::ActsDynamicVector::Zero(alignDof);
+  alignResult.alignmentCovariance =
+      Acts::ActsDynamicMatrix::Zero(alignDof, alignDof);
+  if (alignMode == ActsAlignment::AlignmentMode::local) {
+    const int nConstraints = 3;
 
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(sumChi2SecondDerivative);
-  Eigen::VectorXd eigvals = es.eigenvalues();
-  Eigen::MatrixXd eigvecs = es.eigenvectors();
+    // Constraint handling
+    Eigen::MatrixXd C = Eigen::MatrixXd::Zero(nConstraints, alignDof);
+    Eigen::VectorXd b = Eigen::VectorXd::Zero(nConstraints);
 
-  std::cout << "EIGENVALUES " << eigvals << "\n";
-
-  double maxEig = std::abs(eigvals.maxCoeff());
-  double eps = 1e-20;
-  double tol = eps * maxEig;
-
-  // build inverse diag with zeroing small modes
-  Eigen::VectorXd invDiag(eigvals.size());
-  for (int i = 0; i < eigvals.size(); ++i) {
-    if (eigvals(i) > tol) {
-      invDiag(i) = 1.0 / eigvals(i);
-    } else {
-      invDiag(i) = 1e-20;
+    for (const auto& [surf, idx] : alignResult.idxedAlignSurfaces) {
+      C(0, idx * Acts::eAlignmentSize + Acts::eAlignmentCenter1) = 1.0;
+      C(1, idx * Acts::eAlignmentSize + Acts::eAlignmentCenter2) = 1.0;
+      C(2, idx * Acts::eAlignmentSize + Acts::eAlignmentRotation2) = 1.0;
     }
+
+    Eigen::MatrixXd A =
+        Eigen::MatrixXd::Zero(sumChi2SecondDerivative.rows() + C.rows(),
+                              sumChi2SecondDerivative.cols() + C.rows());
+    A.topLeftCorner(sumChi2SecondDerivative.rows(),
+                    sumChi2SecondDerivative.cols()) = sumChi2SecondDerivative;
+    A.topRightCorner(sumChi2SecondDerivative.rows(), C.rows()) = C.transpose();
+    A.bottomLeftCorner(C.rows(), sumChi2SecondDerivative.cols()) = C;
+
+    Eigen::VectorXd rhs(sumChi2SecondDerivative.rows() + C.rows());
+    rhs.head(sumChi2SecondDerivative.rows()) = -sumChi2Derivative;
+    rhs.tail(C.rows()) = b;
+
+    // Solve
+    Eigen::VectorXd sol = A.fullPivLu().solve(rhs);
+
+    alignResult.deltaAlignmentParameters = sol.head(alignDof);
+  } else if (alignMode == ActsAlignment::AlignmentMode::global) {
+    const int nRigid = 2;
+
+    Eigen::MatrixXd U = Eigen::MatrixXd::Zero(alignDof, nRigid);
+
+    for (const auto& [surf, idx] : alignResult.idxedAlignSurfaces) {
+      U(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter1, 0) = 1.0;
+      U(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter2, 1) = 1.0;
+    }
+    Eigen::MatrixXd rigidA = U.transpose() * sumChi2SecondDerivative * U;
+    Eigen::VectorXd rigidb =
+        -U.transpose() *
+        (sumChi2SecondDerivative * alignResult.deltaAlignmentParameters +
+         sumChi2Derivative);
+
+    double eps = 1e-12 * std::max(1.0, rigidA.norm());
+    if (rigidA.fullPivLu().rank() < nRigid) {
+      rigidA.diagonal().array() += eps;
+    }
+
+    // Solve for z
+    Eigen::VectorXd rigidShift = rigidA.fullPivLu().solve(rigidb);
+
+    alignResult.deltaAlignmentParameters =
+        alignResult.deltaAlignmentParameters + U * rigidShift;
   }
-
-  // reconstruct pseudo-inverse: Hplus = V * diag(invDiag) * V^T
-  Eigen::MatrixXd Hplus = eigvecs * invDiag.asDiagonal() * eigvecs.transpose();
-
-  // solve delta = - Hplus * g
-  Eigen::VectorXd delta_filtered = -Hplus * sumChi2Derivative;
-  alignResult.deltaAlignmentParameters = delta_filtered;
-
-  //-----------------------------------------------------------------------------
-
-  // // Initialize the alignment results
-  // alignResult.deltaAlignmentParameters =
-  //     Acts::ActsDynamicVector::Zero(alignDof);
-  // alignResult.alignmentCovariance =
-  //     Acts::ActsDynamicMatrix::Zero(alignDof, alignDof);
-
-  // // Constraint handling
-  // Eigen::MatrixXd C;
-  // Eigen::VectorXd b;
-
-  // C.resize(3, alignDof);
-  // C *= 0;
-  // b = Eigen::VectorXd::Zero(3);
-
-  // for (const auto& [surf, idx] : alignResult.idxedAlignSurfaces) {
-  //   C(0, idx * Acts::eAlignmentSize + Acts::eAlignmentCenter1) = 1.0;
-  //   C(1, idx * Acts::eAlignmentSize + Acts::eAlignmentCenter2) = 1.0;
-  //   C(2, idx * Acts::eAlignmentSize + Acts::eAlignmentRotation2) = 1.0;
-  // }
-
-  // Eigen::MatrixXd A(sumChi2SecondDerivative.rows() + C.rows(),
-  //                   sumChi2SecondDerivative.cols() + C.rows());
-  // A.setZero();
-  // A.topLeftCorner(sumChi2SecondDerivative.rows(),
-  //                 sumChi2SecondDerivative.cols()) = sumChi2SecondDerivative;
-  // A.topRightCorner(sumChi2SecondDerivative.rows(), C.rows()) = C.transpose();
-  // A.bottomLeftCorner(C.rows(), sumChi2SecondDerivative.cols()) = C;
-
-  // Eigen::VectorXd rhs(sumChi2SecondDerivative.rows() + C.rows());
-  // rhs.head(sumChi2SecondDerivative.rows()) = -sumChi2Derivative;
-  // rhs.tail(C.rows()) = b;
-
-  // // Solve
-  // Eigen::VectorXd sol = A.fullPivLu().solve(rhs);
-
-  // alignResult.deltaAlignmentParameters = sol.head(alignDof);
-
-  // // --- Rigid transverse (X,Y) global DOFs on top of relative x ---
-  // // alignDof is the dimension of alignResult.deltaAlignmentParameters
-  // const int nRigid = 2;  // global X and Y
-
-  // // Build U: alignDof x nRigid
-  // Eigen::MatrixXd U = Eigen::MatrixXd::Zero(alignDof, nRigid);
-
-  // // Offsets in your alignment parameter vector (adjust if different)
-  // const std::size_t xOff = Acts::eAlignmentCenter1;  // x
-  // const std::size_t yOff = Acts::eAlignmentCenter2;  // y
-
-  // // Fill U: put 1.0 into each plane's x and y translation rows
-  // for (const auto& [surf, idx] : alignResult.idxedAlignSurfaces) {
-  //   const std::size_t base = idx * Acts::eAlignmentSize;
-  //   U(base + xOff, 0) = 1.0;  // global X DOF
-  //   U(base + yOff, 1) = 1.0;  // global Y DOF
-  // }
-
-  // // Current relative solution x (from your constrained run)
-  // Eigen::VectorXd x = alignResult.deltaAlignmentParameters;  // alignDof
-
-  // // Small 2x2 system A z = b
-  // Eigen::MatrixXd rigidA = U.transpose() * sumChi2SecondDerivative * U;  //
-  // 2x2 Eigen::VectorXd rigidb = -U.transpose() *
-  //                     (sumChi2SecondDerivative * x + sumChi2Derivative);  //
-  //                     2x1
-
-  // // Regularisation guard: if A is singular or poorly conditioned, regularize
-  // // slightly
-  // double eps = 1e-12 * std::max(1.0, rigidA.norm());  // tiny relative
-  // regulariser if (rigidA.fullPivLu().rank() < nRigid) {
-  //   rigidA.diagonal().array() += eps;
-  // }
-
-  // // Solve for z
-  // Eigen::VectorXd z = rigidA.fullPivLu().solve(rigidb);
-
-  // // Final (per-plane) deltas: add rigid XY shift to the relative solution
-  // Eigen::VectorXd deltaFinal = x + U * z;
-
-  // // Store back
-  // alignResult.deltaAlignmentParameters = deltaFinal;
-
-  // // Optional: print global rigid shift for logging
-  // ACTS_INFO("Global rigid transverse shift z = [" << z.transpose() << "]");
-
-  // // Solve the linear equation to get alignment parameters change
-  // alignResult.deltaAlignmentParameters =
-  //     -sumChi2SecondDerivative.fullPivLu().solve(sumChi2Derivative);
   ACTS_VERBOSE("sumChi2SecondDerivative = \n" << sumChi2SecondDerivative);
   ACTS_VERBOSE("sumChi2Derivative = \n" << sumChi2Derivative);
   ACTS_VERBOSE("alignResult.deltaAlignmentParameters \n");
@@ -347,20 +292,13 @@ ActsAlignment::Alignment<fitter_t>::align(
   std::queue<double> recentChi2ONdf;
 
   // Perform the fit to the trajectories and update alignment parameters
-  AlignmentMask alignMask = (AlignmentMask::Center1 | AlignmentMask::Center2 |
-                             AlignmentMask::Rotation2);
-
   ACTS_INFO("Max number of iterations: " << alignOptions.maxIterations);
   for (unsigned int iIter = 0; iIter < alignOptions.maxIterations; iIter++) {
-    // Set the alignment mask
-    auto iter_it = alignOptions.iterationState.find(iIter);
-    if (iter_it != alignOptions.iterationState.end()) {
-      alignMask = iter_it->second;
-    }
     // Calculate the alignment parameters delta etc.
     calculateAlignmentParameters(
         trajectoryCollection, startParametersCollection,
-        alignOptions.fitOptions, alignResult, alignMask);
+        alignOptions.fitOptions, alignResult, alignOptions.alignmentMask,
+        alignOptions.alignmentMode);
     // Screen out the information
     ACTS_INFO("iIter = " << iIter << ", total chi2 = " << alignResult.chi2
                          << ", total measurementDim = "
