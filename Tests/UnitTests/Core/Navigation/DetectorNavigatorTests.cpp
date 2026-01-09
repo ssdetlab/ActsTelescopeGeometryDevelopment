@@ -60,6 +60,19 @@ struct StateRecorder {
   }
 };
 
+inline double sinc(double x) {
+  // Threshold chosen to guarantee full double precision
+  constexpr double x2_limit = 1e-8;  // (x^2)
+
+  if (x * x < x2_limit) {
+    // Taylor expansion up to x^6
+    const double x2 = x * x;
+    return 1.0 - x2 / 6.0 + x2 * x2 / 120.0 - x2 * x2 * x2 / 5040.0;
+  } else {
+    return std::sin(x) / x;
+  }
+}
+
 BOOST_AUTO_TEST_SUITE(DetectorNavigator)
 
 // // Initialization tests
@@ -918,11 +931,11 @@ BOOST_AUTO_TEST_CASE(TEST) {
   rotation.col(1) = yPos;
   rotation.col(2) = zPos;
 
-  auto bounds1 = std::make_unique<Acts::CuboidVolumeBounds>(3, 3, 3);
+  auto bounds1 = std::make_unique<Acts::CuboidVolumeBounds>(100, 100, 100);
   auto transform1 = Acts::Transform3::Identity();
   auto surface1 = Acts::Surface::makeShared<Acts::PlaneSurface>(
       transform1 * Acts::Transform3(rotation),
-      std::make_shared<Acts::RectangleBounds>(0.1, 0.1));
+      std::make_shared<Acts::RectangleBounds>(90, 90));
 
   auto volume1 = Acts::Experimental::DetectorVolumeFactory::construct(
       Acts::Experimental::defaultPortalAndSubPortalGenerator(), geoContext,
@@ -980,7 +993,7 @@ BOOST_AUTO_TEST_CASE(TEST) {
   Navigator::Config navCfg;
   navCfg.detector = detector.get();
 
-  double B = 5_T;
+  double B = -0.35_T;
   Acts::ConstantBField field(Acts::Vector3(0, 0, B));
   Stepper stepper(std::make_shared<Acts::ConstantBField>(field));
 
@@ -996,9 +1009,9 @@ BOOST_AUTO_TEST_CASE(TEST) {
 
   // Set the parameters to intentionally
   // miss the sensitive surfaces
-  Acts::Vector4 pos(-2, 0.02, 0.01, 0);
-  Acts::CurvilinearTrackParameters start(pos, -8_degree, 85_degree,
-                                         -1_e / 0.4_GeV, std::nullopt,
+  Acts::Vector4 pos(-50, -20, 10, 0);
+  Acts::CurvilinearTrackParameters start(pos, 0_degree, 90_degree,
+                                         -1_e / 1.7_GeV, std::nullopt,
                                          Acts::ParticleHypothesis::electron());
 
   auto pState = propagator.makeState(start, options);
@@ -1011,31 +1024,72 @@ BOOST_AUTO_TEST_CASE(TEST) {
 
   propagator.propagate(pState);
 
-  double xPrime = 3.0;
+  double xPrime = 100.0;
 
-  double x0 = pos.x() - start.momentum().y() / B;
-  double y0 = pos.y() + start.momentum().x() / B;
+  // double x0 = pos.x() - start.momentum().y() / B;
+  // double y0 = pos.y() + start.momentum().x() / B;
 
-  double rho2 =
-      (pos.x() - x0) * (pos.x() - x0) + (pos.y() - y0) * (pos.y() - y0);
+  // double rho2 =
+  //     (pos.x() - x0) * (pos.x() - x0) + (pos.y() - y0) * (pos.y() - y0);
+
+  // double deltaX = xPrime - x0;
+  // double deltaY = std::sqrt(rho2 - deltaX * deltaX);
+
+  double sign = (field.getField().z() > 0) ? -1 : 1;
+  // double yPrime = y0 + sign * deltaY;
+
+  // double arg = -deltaX / (yPrime - y0);
+  // double denom = std::sqrt(1 + arg * arg);
+  // double momTrans = std::hypot(start.momentum().x(), start.momentum().y());
+  // double momXPrime = momTrans / denom;
+  // double momYPrime = momTrans * arg / denom;
+  // double momZPrime = start.momentum().z();
+
+  // double beta = std::asin(start.momentum().y() / momTrans);
+  // double zPrime = pos.z() + start.momentum().z() / B *
+  //                               (std::asin(momYPrime / momTrans) - beta);
+
+  double P = start.absoluteMomentum();
+
+  double x = pos.x();
+  double y = pos.y();
+  double z = pos.z();
+
+  double dirX = start.direction().x();
+  double dirY = start.direction().y();
+  double dirZ = start.direction().z();
+
+  double dirTrans = std::hypot(dirX, dirY);
+  double asinDir = std::asin(dirY / dirTrans);
+
+  double x0 = x - P * dirY / B;
+  double y0 = y + P * dirX / B;
+
+  double rho2 = (x - x0) * (x - x0) + (y - y0) * (y - y0);
 
   double deltaX = xPrime - x0;
   double deltaY = std::sqrt(rho2 - deltaX * deltaX);
 
-  double sign = (field.getField().z() > 0) ? -1 : 1;
   double yPrime = y0 + sign * deltaY;
 
   double arg = -deltaX / (yPrime - y0);
   double denom = std::sqrt(1 + arg * arg);
-  double momTrans = std::hypot(start.momentum().x(), start.momentum().y());
-  double momXPrime = momTrans / denom;
-  double momYPrime = momTrans * arg / denom;
-  double momZPrime = start.momentum().z();
+  Acts::Vector3 exitDir = Acts::Vector3::Zero();
+  exitDir[0] = 1.0 / denom;
+  exitDir[1] = arg / denom;
+  exitDir[2] = dirZ;
+  ///
+  exitDir /= exitDir.norm();
+  ///
 
-  double beta = std::asin(start.momentum().y() / momTrans);
-  double zPrime = pos.z() + start.momentum().z() / B *
-                                (std::asin(momYPrime / momTrans) - beta);
+  double zPrime =
+      z + P * dirZ / B * (std::asin(exitDir.y() / dirTrans) - asinDir);
 
+  double momXPrime = P * exitDir.x();
+  double momYPrime = P * exitDir.y();
+  double momZPrime = P * exitDir.z();
+
+  std::cout << "RHO " << std::sqrt(rho2) << "\n";
   std::cout << "X0 " << x0 << "\n";
   std::cout << "Y0 " << y0 << "\n";
   std::cout << "XPRIME " << xPrime << "\n";
@@ -1044,6 +1098,15 @@ BOOST_AUTO_TEST_CASE(TEST) {
   std::cout << "MOMXPRIME " << momXPrime << "\n";
   std::cout << "MOMYPRIME " << momYPrime << "\n";
   std::cout << "MOMZPRIME " << momZPrime << "\n";
+
+  double thetaYFinal = std::atan(momYPrime / momXPrime);
+  double thetaZFinal = std::atan(momZPrime / momXPrime);
+
+  double momFromY = B * (xPrime - start.position().x()) / std::sin(thetaYFinal);
+  double momFromZ = B * (xPrime - start.position().x()) / std::sin(thetaZFinal);
+
+  std::cout << "momFromY " << momFromY << "\n";
+  std::cout << "momFromZ " << momFromZ << "\n";
 }
 
 BOOST_AUTO_TEST_SUITE_END()
