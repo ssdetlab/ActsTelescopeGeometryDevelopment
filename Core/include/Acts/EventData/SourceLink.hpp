@@ -17,6 +17,7 @@
 #include <concepts>
 #include <iostream>
 #include <type_traits>
+#include <typeindex>
 #include <utility>
 
 #if !defined(ACTS_SOURCELINK_SBO_SIZE)
@@ -41,7 +42,7 @@ class SourceLink final {
   template <typename T>
   explicit SourceLink(T&& upstream)
     requires(!std::same_as<std::decay_t<T>, SourceLink>)
-      : m_upstream(std::forward<T>(upstream)) {
+      : m_upstream(std::forward<T>(upstream)), m_typeIdx(typeid(T)) {
     static_assert(!std::is_same_v<std::decay_t<T>, SourceLink>,
                   "Cannot wrap SourceLink in SourceLink");
   }
@@ -62,8 +63,13 @@ class SourceLink final {
     return m_upstream.as<T>();
   }
 
+  std::type_index type() const {
+    return m_typeIdx;
+  }
+
  private:
   any_type m_upstream{};
+  std::type_index m_typeIdx;
 };
 
 template <typename T>

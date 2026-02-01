@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Definitions/Alignment.hpp"
 #include "Acts/Definitions/TrackParametrization.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
@@ -29,7 +30,7 @@
 namespace ActsAlignment {
 using AlignedTransformUpdater =
     std::function<bool(Acts::DetectorElementBase*, const Acts::GeometryContext&,
-                       const Acts::Transform3&)>;
+                       const Acts::Vector3&, const Acts::Vector3&)>;
 
 enum struct AlignmentMode : int { local = 0, global = 1 };
 
@@ -190,6 +191,7 @@ struct Alignment {
   template <typename trajectory_container_t,
             typename start_parameters_container_t, typename fit_options_t>
   void calculateAlignmentParameters(
+      const Acts::GeometryContext& gctx,
       const trajectory_container_t& trajectoryCollection,
       const start_parameters_container_t& startParametersCollection,
       const fit_options_t& fitOptions, AlignmentResult& alignResult,

@@ -6,11 +6,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+#include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Definitions/Alignment.hpp"
 #include "Acts/EventData/VectorMultiTrajectory.hpp"
 #include "Acts/EventData/VectorTrackContainer.hpp"
 #include "ActsAlignment/Kernel/Alignment.hpp"
 #include "ActsAlignment/Kernel/AlignmentMask.hpp"
+
+#include <Eigen/src/Core/Matrix.h>
 
 template <typename fitter_t>
 template <typename source_link_t, typename start_parameters_t,
@@ -58,6 +61,7 @@ template <typename fitter_t>
 template <typename trajectory_container_t,
           typename start_parameters_container_t, typename fit_options_t>
 void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
+    const Acts::GeometryContext& gctx,
     const trajectory_container_t& trajectoryCollection,
     const start_parameters_container_t& startParametersCollection,
     const fit_options_t& fitOptions,
@@ -87,9 +91,6 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
   for (unsigned int iTraj = 0; iTraj < trajectoryCollection.size(); iTraj++) {
     const auto& sourcelinks = trajectoryCollection.at(iTraj);
     const auto& sParameters = startParametersCollection.at(iTraj);
-    // Set the target surface
-    fitOptionsWithRefSurface.referenceSurface = &sParameters.referenceSurface();
-    // The result for one single track
     auto evaluateRes = evaluateTrackAlignmentState(
         fitOptions.geoContext, sourcelinks, sParameters,
         fitOptionsWithRefSurface, alignResult.idxedAlignSurfaces, alignMask);
@@ -122,8 +123,6 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
     sumChi2ONdf += alignState.chi2 / alignState.measurementDim;
   }
   alignResult.averageChi2ONdf = sumChi2ONdf / alignResult.numTracks;
-
-  std::cout << "sumChi2Derivative = \n" << sumChi2Derivative << "\n";
 
   // Get the inverse of chi2 second derivative matrix (we need this to
   // calculate the covariance of the alignment parameters)
@@ -171,20 +170,60 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
     Eigen::VectorXd sol = A.fullPivLu().solve(rhs);
 
     alignResult.deltaAlignmentParameters = sol.head(alignDof);
+
+    // Alignment parameters covariance
+    alignResult.alignmentCovariance = 2 * sumChi2SecondDerivativeInverse;
   } else if (alignMode == ActsAlignment::AlignmentMode::global) {
-    const int nRigid = 2;
+    const int nRigid = 6;
 
     Eigen::MatrixXd U = Eigen::MatrixXd::Zero(alignDof, nRigid);
 
+    bool doCenter0 = ACTS_CHECK_BIT(alignMask, AlignmentMask::Center0);
+    bool doCenter1 = ACTS_CHECK_BIT(alignMask, AlignmentMask::Center1);
+    bool doCenter2 = ACTS_CHECK_BIT(alignMask, AlignmentMask::Center2);
+    bool doAngle0 = ACTS_CHECK_BIT(alignMask, AlignmentMask::Rotation0);
+    bool doAngle1 = ACTS_CHECK_BIT(alignMask, AlignmentMask::Rotation1);
+    bool doAngle2 = ACTS_CHECK_BIT(alignMask, AlignmentMask::Rotation2);
+
+    Acts::Vector3 centerOfMass = Acts::Vector3::Zero();
     for (const auto& [surf, idx] : alignResult.idxedAlignSurfaces) {
-      U(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter1, 0) = 1.0;
-      U(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter2, 1) = 1.0;
+      centerOfMass += surf->center(gctx);
     }
+    centerOfMass /= alignResult.idxedAlignSurfaces.size();
+
+    for (const auto& [surf, idx] : alignResult.idxedAlignSurfaces) {
+      if (doAngle0) {
+        U.block(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter0, 3, 3, 1) =
+            Acts::Vector3::UnitX().cross(surf->center(gctx) - centerOfMass);
+        U(idx * Acts::eAlignmentSize + Acts::eAlignmentRotation0, 3) = 1;
+      }
+      if (doAngle1) {
+        U.block(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter0, 4, 3, 1) =
+            Acts::Vector3::UnitY().cross(surf->center(gctx) - centerOfMass);
+        U(idx * Acts::eAlignmentSize + Acts::eAlignmentRotation1, 4) = 1;
+      }
+      if (doAngle2) {
+        U.block(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter0, 5, 3, 1) =
+            Acts::Vector3::UnitZ().cross(surf->center(gctx) - centerOfMass);
+        U(idx * Acts::eAlignmentSize + Acts::eAlignmentRotation2, 5) = 1;
+      }
+
+      if (doCenter0) {
+        U(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter0, 0) = 1;
+      }
+      if (doCenter1) {
+        U(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter1, 1) = 1;
+      }
+      if (doCenter2) {
+        U(idx * Acts::eAlignmentSize + Acts::eAlignmentCenter2, 2) = 1;
+      }
+    }
+
+    std::cout << "RIGID PROJECTOR\n" << U << "\n";
     Eigen::MatrixXd rigidA = U.transpose() * sumChi2SecondDerivative * U;
-    Eigen::VectorXd rigidb =
-        -U.transpose() *
-        (sumChi2SecondDerivative * alignResult.deltaAlignmentParameters +
-         sumChi2Derivative);
+    Eigen::VectorXd rigidb = -U.transpose() * sumChi2Derivative;
+
+    std::cout << "RIGID DERIVATIVE\n" << -rigidb << "\n";
 
     double eps = 1e-12 * std::max(1.0, rigidA.norm());
     if (rigidA.fullPivLu().rank() < nRigid) {
@@ -192,20 +231,18 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
     }
 
     // Solve for z
-    Eigen::VectorXd rigidShift = rigidA.fullPivLu().solve(rigidb);
+    Eigen::VectorXd rigidDelta = rigidA.fullPivLu().solve(rigidb);
 
-    alignResult.deltaAlignmentParameters =
-        alignResult.deltaAlignmentParameters + U * rigidShift;
+    alignResult.deltaAlignmentParameters = U * rigidDelta;
+
+    // Alignment parameters covariance
+    alignResult.alignmentCovariance = 2 * rigidA.inverse();
   }
   ACTS_VERBOSE("sumChi2SecondDerivative = \n" << sumChi2SecondDerivative);
   ACTS_VERBOSE("sumChi2Derivative = \n" << sumChi2Derivative);
+  std::cout << "sumChi2Derivative = \n" << sumChi2Derivative << "\n";
   ACTS_VERBOSE("alignResult.deltaAlignmentParameters \n");
 
-  std::cout << "alignResult.deltaAlignmentParameters\n"
-            << alignResult.deltaAlignmentParameters << "\n";
-
-  // Alignment parameters covariance
-  alignResult.alignmentCovariance = 2 * sumChi2SecondDerivativeInverse;
   // chi2 change
   alignResult.deltaChi2 = 0.5 * sumChi2Derivative.transpose() *
                           alignResult.deltaAlignmentParameters;
@@ -221,11 +258,7 @@ ActsAlignment::Alignment<fitter_t>::updateAlignmentParameters(
   // Update the aligned transform
   Acts::AlignmentVector deltaAlignmentParam = Acts::AlignmentVector::Zero();
   for (const auto& [surface, index] : alignResult.idxedAlignSurfaces) {
-    // 1. The original transform
-    const Acts::Vector3& oldCenter = surface->center(gctx);
-    const Acts::Transform3& oldTransform = surface->transform(gctx);
-
-    // 2. The delta transform
+    // Delta transform
     deltaAlignmentParam = alignResult.deltaAlignmentParameters.segment(
         Acts::eAlignmentSize * index, Acts::eAlignmentSize);
     // The delta translation
@@ -235,28 +268,14 @@ ActsAlignment::Alignment<fitter_t>::updateAlignmentParameters(
     Acts::Vector3 deltaEulerAngles =
         deltaAlignmentParam.segment<3>(Acts::eAlignmentRotation0);
 
-    // 3. The new transform
-    const Acts::Vector3 newCenter = oldCenter + deltaCenter;
-    Acts::Transform3 newTransform = oldTransform;
-    newTransform.translation() = newCenter;
-    // Rotation first around fixed local x, then around fixed local y, and last
-    // around fixed local z, this is the same as first around local z, then
-    // around new loca y, and last around new local x below
-    newTransform *=
-        Acts::AngleAxis3(deltaEulerAngles(2), Acts::Vector3::UnitZ());
-    newTransform *=
-        Acts::AngleAxis3(deltaEulerAngles(1), Acts::Vector3::UnitY());
-    newTransform *=
-        Acts::AngleAxis3(deltaEulerAngles(0), Acts::Vector3::UnitX());
-
-    // 4. Update the aligned transform
+    // Update the aligned transform
     //@Todo: use a better way to handle this (need dynamic cast to inherited
     // detector element type)
     ACTS_VERBOSE("Delta of alignment parameters at element "
                  << index << "= \n"
                  << deltaAlignmentParam);
     bool updated = alignedTransformUpdater(alignedDetElements.at(index), gctx,
-                                           newTransform);
+                                           deltaCenter, deltaEulerAngles);
     if (!updated) {
       ACTS_ERROR("Update alignment parameters for detector element failed");
       return AlignmentError::AlignmentParametersUpdateFailure;
@@ -297,9 +316,9 @@ ActsAlignment::Alignment<fitter_t>::align(
   for (unsigned int iIter = 0; iIter < alignOptions.maxIterations; iIter++) {
     // Calculate the alignment parameters delta etc.
     calculateAlignmentParameters(
-        trajectoryCollection, startParametersCollection,
-        alignOptions.fitOptions, alignResult, alignOptions.alignmentMask,
-        alignOptions.alignmentMode);
+        alignOptions.fitOptions.geoContext, trajectoryCollection,
+        startParametersCollection, alignOptions.fitOptions, alignResult,
+        alignOptions.alignmentMask, alignOptions.alignmentMode);
     // Screen out the information
     ACTS_INFO("iIter = " << iIter << ", total chi2 = " << alignResult.chi2
                          << ", total measurementDim = "
