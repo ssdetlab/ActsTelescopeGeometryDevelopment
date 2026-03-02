@@ -11,8 +11,11 @@
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
 #include "Acts/Surfaces/Surface.hpp"
+#include "Acts/Surfaces/SurfacePlacementBase.hpp"
+#include "Acts/Utilities/TypeDispatcher.hpp"
 #include "ActsPlugins/Json/ActsJson.hpp"
 #include "ActsPlugins/Json/AlgebraJsonConverter.hpp"
+#include "ActsPlugins/Json/JsonKindDispatcher.hpp"
 #include "ActsPlugins/Json/SurfaceBoundsJsonConverter.hpp"
 
 #include <memory>
@@ -21,7 +24,9 @@
 #include <utility>
 #include <vector>
 
+#include <Eigen/src/Core/util/Meta.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 namespace Acts {
 
@@ -89,6 +94,19 @@ std::shared_ptr<surface_t> surfaceFromJsonT(const nlohmann::json& j) {
 
 namespace SurfaceJsonConverter {
 
+/// ---------------------------------------------------
+/// TODO: Change SurfacePlacement-Surface dependency to
+/// fix the lifetimes
+///
+/// using SurfacePlacementEncoder =
+///     TypeDispatcher<SurfacePlacementBase,
+///                    nlohmann::json(const GeometryContext&)>;
+/// using SurfacePlacementDecoder =
+///     JsonKindDispatcher<std::shared_ptr<SurfacePlacementBase>,
+///                        const GeometryContext&, const
+///                        std::shared_ptr<Surface>&>;
+/// ---------------------------------------------------
+
 /// Options controlling surface JSON serialization.
 struct Options {
   /// Transform serialization options
@@ -98,6 +116,12 @@ struct Options {
   bool writeMaterial = true;
   /// Write surface as portal
   bool portal = false;
+  /// ---------------------------------------------------
+  // // Placement encoder
+  // SurfacePlacementEncoder placementEncoder{};
+  // // Placement decoder
+  // SurfacePlacementDecoder placementDecoder{};
+  /// ---------------------------------------------------
 };
 
 /// Contextual conversion of a surface
@@ -128,6 +152,9 @@ nlohmann::json toJsonDetray(const GeometryContext& gctx, const Surface& surface,
 ///
 /// @return a shared object created from json input
 std::shared_ptr<Surface> fromJson(const nlohmann::json& jSurface);
+
+std::shared_ptr<Surface>
+fromJson(const nlohmann::json& jSurface);
 
 }  // namespace SurfaceJsonConverter
 

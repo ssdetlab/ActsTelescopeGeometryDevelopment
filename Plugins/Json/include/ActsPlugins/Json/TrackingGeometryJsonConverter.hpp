@@ -9,8 +9,12 @@
 #pragma once
 
 #include "Acts/Geometry/GeometryContext.hpp"
+#include "Acts/Navigation/INavigationPolicy.hpp"
+#include "Acts/Navigation/SurfaceArrayNavigationPolicy.hpp"
+#include "Acts/Surfaces/RegularSurface.hpp"
 #include "Acts/Utilities/TypeDispatcher.hpp"
 #include "ActsPlugins/Json/JsonKindDispatcher.hpp"
+#include "ActsPlugins/Json/SurfaceJsonConverter.hpp"
 
 #include <cstddef>
 #include <memory>
@@ -24,6 +28,7 @@ namespace Acts {
 
 class PortalLinkBase;
 class Portal;
+class Surface;
 class TrackingGeometry;
 class TrackingVolume;
 class VolumeBounds;
@@ -39,7 +44,8 @@ class VolumeBounds;
 ///   - traverse the `TrackingVolume::volumes()` tree in depth-first order
 ///   - assign stable in-file volume IDs
 ///   - collect unique portals and assign stable in-file portal IDs
-///   - write each volume transform, bounds payload, children IDs, and portal IDs
+///   - write each volume transform, bounds payload, children IDs, and portal
+///   IDs
 ///   - write all unique portals once in a top-level portal table
 ///   - encode portal links by concrete kind via registered dispatchers
 /// - Deserialization:
@@ -78,9 +84,9 @@ class TrackingGeometryJsonConverter {
     std::size_t at(const object_t& object) const {
       auto it = m_objectIds.find(&object);
       if (it == m_objectIds.end()) {
-        throw std::invalid_argument(
-            "Pointer-to-ID lookup failed for " + std::string{kContext} +
-            ": object is outside serialized hierarchy");
+        throw std::invalid_argument("Pointer-to-ID lookup failed for " +
+                                    std::string{kContext} +
+                                    ": object is outside serialized hierarchy");
       }
       return it->second;
     }
@@ -125,9 +131,9 @@ class TrackingGeometryJsonConverter {
     const pointer_t& at(std::size_t objectId) const {
       auto it = m_objects.find(objectId);
       if (it == m_objects.end()) {
-        throw std::invalid_argument(
-            "ID-to-pointer lookup failed for " + std::string{kContext} +
-            ": unknown serialized object ID");
+        throw std::invalid_argument("ID-to-pointer lookup failed for " +
+                                    std::string{kContext} +
+                                    ": unknown serialized object ID");
       }
       return it->second;
     }
@@ -136,48 +142,86 @@ class TrackingGeometryJsonConverter {
     std::unordered_map<std::size_t, pointer_t> m_objects;
   };
 
-  static inline constexpr char kVolumeLookupContext[] = "volume";
+  static inline constexpr char kSurfaceLookupContext[] = "surface";
   static inline constexpr char kPortalLookupContext[] = "portal";
+  static inline constexpr char kVolumeLookupContext[] = "volume";
 
+  /// Storage and lookups for surfaces
+  using SurfaceIdLookup = PointerToIdLookup<Surface, kSurfaceLookupContext>;
+  using SurfacePointerLookup =
+      IdToPointerLikeLookup<RegularSurface, std::shared_ptr<RegularSurface>,
+                            kSurfaceLookupContext>;
+
+  /// Storage and lookups for portals
+  using PortalIdLookup = PointerToIdLookup<Portal, kPortalLookupContext>;
+  using PortalPointerLookup =
+      IdToPointerLikeLookup<Portal, std::shared_ptr<Portal>,
+                            kPortalLookupContext>;
+
+  /// Storage and lookups for volumes
   using VolumeIdLookup =
       PointerToIdLookup<TrackingVolume, kVolumeLookupContext>;
-  using VolumePointerLookup = IdToPointerLikeLookup<
-      TrackingVolume, TrackingVolume*, kVolumeLookupContext>;
-  using PortalIdLookup = PointerToIdLookup<Portal, kPortalLookupContext>;
-  using PortalPointerLookup = IdToPointerLikeLookup<
-      Portal, std::shared_ptr<Portal>, kPortalLookupContext>;
+  using VolumePointerLookup =
+      IdToPointerLikeLookup<TrackingVolume, TrackingVolume*,
+                            kVolumeLookupContext>;
 
-  using VolumeBoundsEncoder =
-      TypeDispatcher<VolumeBounds, nlohmann::json()>;
+  /// Portal link encoder/decoder
+  using PortalLinkEncoder =
+      TypeDispatcher<PortalLinkBase,
+                     nlohmann::json(const GeometryContext&,
+                                    const TrackingGeometryJsonConverter&,
+                                    const SurfaceIdLookup&,
+                                    const VolumeIdLookup&)>;
+  using PortalLinkDecoder = JsonKindDispatcher<
+      std::unique_ptr<PortalLinkBase>, const GeometryContext&,
+      const TrackingGeometryJsonConverter&, const SurfacePointerLookup&,
+      const VolumePointerLookup&>;
 
-  using PortalLinkEncoder = TypeDispatcher<
-      PortalLinkBase,
-      nlohmann::json(const GeometryContext&,
-                     const TrackingGeometryJsonConverter&,
-                     const VolumeIdLookup&)>;
+  /// Volume bounds encoder/decoder
+  using VolumeBoundsEncoder = TypeDispatcher<VolumeBounds, nlohmann::json()>;
+  using VolumeBoundsDecoder = JsonKindDispatcher<std::unique_ptr<VolumeBounds>>;
 
-  using VolumeBoundsDecoder =
-      JsonKindDispatcher<std::unique_ptr<VolumeBounds>>;
-
-  using PortalLinkDecoder =
-      JsonKindDispatcher<std::unique_ptr<PortalLinkBase>,
+  /// Navigation policy encoder/decoder
+  using NavigationPolicyEncoder =
+      TypeDispatcher<INavigationPolicy,
+                     nlohmann::json(
+                         const Acts::TrackingGeometryJsonConverter&)>;
+  using NavigationPolicyDecoder =
+      JsonKindDispatcher<std::unique_ptr<INavigationPolicy>,
                          const GeometryContext&,
                          const TrackingGeometryJsonConverter&,
-                         const VolumePointerLookup&>;
+                         const TrackingVolume&, const Acts::Logger&>;
 
   /// Configuration for the tracking geometry JSON converter.
   struct Config {
-    /// Dispatcher for volume bounds serialization.
-    VolumeBoundsEncoder encodeVolumeBounds{};
+    /// ---------------------------------------------------
+    /// Dispatcher for surface placement serialization.
+    /// SurfaceJsonConverter::SurfacePlacementEncoder surfacePlacementEncoder{};
+    /// ---------------------------------------------------
 
     /// Dispatcher for portal link serialization.
     PortalLinkEncoder encodePortalLink{};
+
+    /// Dispatcher for volume bounds serialization.
+    VolumeBoundsEncoder encodeVolumeBounds{};
+
+    /// Dispatcher for navigation policy serialization.
+    NavigationPolicyEncoder encodeNavigationPolicy{};
+
+    /// ---------------------------------------------------
+    /// Dispatcher for surface placement serialization.
+    /// SurfaceJsonConverter::SurfacePlacementDecoder surfacePlacementDecoder{
+    ///     "kind", "surface placement"};
+    /// ---------------------------------------------------
+
+    /// Decoder dispatcher for portal links by kind tag.
+    PortalLinkDecoder decodePortalLink{"kind", "portal link"};
 
     /// Decoder dispatcher for volume bounds by kind tag.
     VolumeBoundsDecoder decodeVolumeBounds{"kind", "volume bounds"};
 
     /// Decoder dispatcher for portal links by kind tag.
-    PortalLinkDecoder decodePortalLink{"kind", "portal link"};
+    NavigationPolicyDecoder decodeNavigationPolicy{"kind", "navigation policy"};
 
     /// Construct default config with all supported converters registered.
     static Config defaultConfig();
@@ -186,7 +230,8 @@ class TrackingGeometryJsonConverter {
   /// Construct converter with custom or default dispatch configuration.
   ///
   /// @param config is the conversion dispatch configuration
-  explicit TrackingGeometryJsonConverter(Config config = Config::defaultConfig());
+  explicit TrackingGeometryJsonConverter(
+      Config config = Config::defaultConfig());
 
   /// Convert a tracking geometry to JSON.
   nlohmann::json toJson(const GeometryContext& gctx,
@@ -198,29 +243,45 @@ class TrackingGeometryJsonConverter {
                         const TrackingVolume& world,
                         const Options& options = Options{}) const;
 
-  /// Reconstruct a tracking volume hierarchy from JSON.
-  std::shared_ptr<TrackingVolume> trackingVolumeFromJson(
-      const GeometryContext& gctx, const nlohmann::json& encoded,
-      const Options& options = Options{}) const;
-
   /// Reconstruct a tracking geometry from JSON.
   std::shared_ptr<TrackingGeometry> trackingGeometryFromJson(
       const GeometryContext& gctx, const nlohmann::json& encoded,
-      const Options& options = Options{}) const;
+      const Options& options = Options{});
 
   /// Serialize one portal link using the configured dispatcher.
   nlohmann::json portalLinkToJson(const GeometryContext& gctx,
                                   const PortalLinkBase& link,
+                                  const SurfaceIdLookup& surfaceIds,
                                   const VolumeIdLookup& volumeIds) const;
 
   /// Deserialize one portal link using configured decoders.
   std::unique_ptr<PortalLinkBase> portalLinkFromJson(
       const GeometryContext& gctx, const nlohmann::json& encoded,
+      const SurfacePointerLookup& surfaces,
       const VolumePointerLookup& volumes) const;
+
+  /// Reconstruct a tracking volume hierarchy from JSON.
+  std::shared_ptr<TrackingVolume> trackingVolumeFromJson(
+      const GeometryContext& gctx, const nlohmann::json& encoded,
+      const Options& options = Options{});
+
+  /// Serialize navigation policy using the configured dispatcher.
+  nlohmann::json navigationPolicyToJson(const INavigationPolicy& policy) const;
+
+  /// Deserialize navigation policy using configured decoders.
+  std::unique_ptr<Acts::INavigationPolicy> navigationPolicyFromJson(
+      const Acts::GeometryContext& gctx, const nlohmann::json& encoded,
+      const Acts::TrackingVolume& volume, const Acts::Logger& logger) const;
 
  private:
   Config m_cfg;
 };
+
+NLOHMANN_JSON_SERIALIZE_ENUM(
+    SurfaceArrayNavigationPolicy::LayerType,
+    {{SurfaceArrayNavigationPolicy::LayerType::Cylinder, "Cylinder"},
+     {SurfaceArrayNavigationPolicy::LayerType::Disc, "Disc"},
+     {SurfaceArrayNavigationPolicy::LayerType::Plane, "Plane"}})
 
 /// @}
 }  // namespace Acts

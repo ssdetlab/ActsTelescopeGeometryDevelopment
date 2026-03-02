@@ -28,7 +28,12 @@
 #include "Acts/Surfaces/TrapezoidBounds.hpp"
 #include "Acts/Utilities/ThrowAssert.hpp"
 #include "ActsPlugins/Json/DetrayJsonHelper.hpp"
+#include "ActsPlugins/Json/GeometryIdentifierJsonConverter.hpp"
 #include "ActsPlugins/Json/MaterialJsonConverter.hpp"
+
+#include <memory>
+
+#include <nlohmann/json_fwd.hpp>
 
 void Acts::to_json(nlohmann::json& j,
                    const Acts::SurfaceAndMaterialWithContext& surface) {
@@ -129,8 +134,14 @@ std::shared_ptr<Acts::Surface> Acts::SurfaceJsonConverter::fromJson(
 
   throw_assert(mutableSf, "Could not create surface from json");
 
-  GeometryIdentifier geoID(j["geo_id"]);
-  mutableSf->assignGeometryId(geoID);
+  if (j.find("geo_id") != j.end() && !j["geo_id"].empty()) {
+    GeometryIdentifier geoID = j["geo_id"].get<GeometryIdentifier>();
+    mutableSf->assignGeometryId(geoID);
+  } else {
+    mutableSf->assignGeometryId(GeometryIdentifier(0));
+  }
+  mutableSf->assignIsSensitive(j["sensitive"].get<bool>());
+
   // Add material
   if (j.find("material") != j.end() && !j["material"].empty()) {
     const ISurfaceMaterial* surfaceMaterial = nullptr;
@@ -155,10 +166,19 @@ nlohmann::json Acts::SurfaceJsonConverter::toJson(const GeometryContext& gctx,
   jSurface["type"] = surface.type();
   // Transform is always needed
   jSurface["bounds"] = SurfaceBoundsJsonConverter::toJson(sBounds);
-  jSurface["geo_id"] = surface.geometryId().value();
+  jSurface["geo_id"] = nlohmann::json(surface.geometryId());
+  jSurface["sensitive"] = surface.isSensitive();
   if (surface.surfaceMaterial() != nullptr && options.writeMaterial) {
-    jSurface["material"] = nlohmann::json(surface.surfaceMaterial());
+    jSurface["material"] =
+        nlohmann::json(surface.surfaceMaterial())["material"];
   }
+  // ---------------------------------------------------
+  // if (surface.surfacePlacement() != nullptr &&
+  //     options.placementEncoder.hasFunction(*surface.surfacePlacement())) {
+  //   jSurface["surface_placement"] =
+  //       options.placementEncoder(*surface.surfacePlacement(), gctx);
+  // }
+  // ---------------------------------------------------
   return jSurface;
 }
 

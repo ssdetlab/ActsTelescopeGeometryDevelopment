@@ -17,12 +17,12 @@ namespace Acts {
 
 SurfaceArrayNavigationPolicy::SurfaceArrayNavigationPolicy(
     const GeometryContext& gctx, const TrackingVolume& volume,
-    const Logger& logger, Config config)
-    : m_volume(volume) {
+    const Logger& logger, const Config& config)
+    : m_cfg(config), m_volume(volume) {
   ACTS_VERBOSE("Constructing SurfaceArrayNavigationPolicy for volume "
                << volume.volumeName());
-  ACTS_VERBOSE("~> Layer type is " << config.layerType);
-  ACTS_VERBOSE("~> bins: " << config.bins.first << " x " << config.bins.second);
+  ACTS_VERBOSE("~> Layer type is " << m_cfg.layerType);
+  ACTS_VERBOSE("~> bins: " << m_cfg.bins.first << " x " << m_cfg.bins.second);
 
   SurfaceArrayCreator::Config sacConfig;
   // This is important! detray does not support separate transforms for the
@@ -48,15 +48,15 @@ SurfaceArrayNavigationPolicy::SurfaceArrayNavigationPolicy(
     throw std::runtime_error("Cannot create surface array with zero surfaces");
   }
 
-  if (config.layerType == LayerType::Disc) {
-    auto [binsR, binsPhi] = config.bins;
+  if (m_cfg.layerType == LayerType::Disc) {
+    auto [binsR, binsPhi] = m_cfg.bins;
     m_surfaceArray =
         sac.surfaceArrayOnDisc(gctx, std::move(surfaces), binsPhi, binsR);
-  } else if (config.layerType == LayerType::Cylinder) {
-    auto [binsPhi, binsZ] = config.bins;
+  } else if (m_cfg.layerType == LayerType::Cylinder) {
+    auto [binsPhi, binsZ] = m_cfg.bins;
     m_surfaceArray =
         sac.surfaceArrayOnCylinder(gctx, std::move(surfaces), binsPhi, binsZ);
-  } else if (config.layerType == LayerType::Plane) {
+  } else if (m_cfg.layerType == LayerType::Plane) {
     ACTS_ERROR("Plane layers are not yet supported");
     throw std::invalid_argument("Plane layers are not yet supported");
   } else {

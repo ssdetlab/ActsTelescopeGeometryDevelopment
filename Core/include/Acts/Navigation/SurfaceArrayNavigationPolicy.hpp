@@ -40,7 +40,8 @@ class SurfaceArrayNavigationPolicy : public INavigationPolicy {
   /// @param config The configuration for the surface array
   explicit SurfaceArrayNavigationPolicy(const GeometryContext& gctx,
                                         const TrackingVolume& volume,
-                                        const Logger& logger, Config config);
+                                        const Logger& logger,
+                                        const Config& config);
 
   /// Update the navigation state from the surface array
   /// @param gctx The geometry context
@@ -82,7 +83,10 @@ class SurfaceArrayNavigationPolicy : public INavigationPolicy {
   /// @return The surface array
   const SurfaceArray& surfaceArray() const;
 
+  const Config& config() const { return m_cfg; }
+
  private:
+  Config m_cfg;
   std::unique_ptr<SurfaceArray> m_surfaceArray{};
   const TrackingVolume& m_volume;
 };
