@@ -46,97 +46,99 @@ ActsExamples::AlignmentAlgorithm::AlignmentAlgorithm(Config cfg,
 }
 
 ActsExamples::ProcessCode ActsExamples::AlignmentAlgorithm::execute(
-    const ActsExamples::AlgorithmContext& ctx) const {
-  // Read input data
-  const auto& measurements = m_inputMeasurements(ctx);
-  const auto& sourceLinks = m_inputSourceLinks(ctx);
-  const auto& protoTracks = m_inputProtoTracks(ctx);
-  const auto& initialParameters = m_inputInitialTrackParameters(ctx);
+    const ActsExamples::AlgorithmContext& /*ctx*/) const {
+  // // Read input data
+  // const auto& measurements = m_inputMeasurements(ctx);
+  // const auto& sourceLinks = m_inputSourceLinks(ctx);
+  // const auto& protoTracks = m_inputProtoTracks(ctx);
+  // const auto& initialParameters = m_inputInitialTrackParameters(ctx);
 
-  // Consistency cross checks
-  if (protoTracks.size() != initialParameters.size()) {
-    ACTS_FATAL("Inconsistent number of proto tracks and parameters "
-               << protoTracks.size() << " vs " << initialParameters.size());
-    return ProcessCode::ABORT;
-  }
+  // // Consistency cross checks
+  // if (protoTracks.size() != initialParameters.size()) {
+  //   ACTS_FATAL("Inconsistent number of proto tracks and parameters "
+  //              << protoTracks.size() << " vs " << initialParameters.size());
+  //   return ProcessCode::ABORT;
+  // }
 
-  std::size_t numTracksUsed = protoTracks.size();
-  if (m_cfg.maxNumTracks > 0 &&
-      m_cfg.maxNumTracks < static_cast<int>(protoTracks.size())) {
-    numTracksUsed = m_cfg.maxNumTracks;
-  }
+  // std::size_t numTracksUsed = protoTracks.size();
+  // if (m_cfg.maxNumTracks > 0 &&
+  //     m_cfg.maxNumTracks < static_cast<int>(protoTracks.size())) {
+  //   numTracksUsed = m_cfg.maxNumTracks;
+  // }
 
-  // Prepare the input track collection
-  std::vector<std::vector<IndexSourceLink>> sourceLinkTrackContainer;
-  sourceLinkTrackContainer.reserve(numTracksUsed);
-  std::vector<IndexSourceLink> trackSourceLinks;
-  for (std::size_t itrack = 0; itrack < numTracksUsed; ++itrack) {
-    // The list of hits and the initial start parameters
-    const auto& protoTrack = protoTracks[itrack];
+  // // Prepare the input track collection
+  // std::vector<std::vector<IndexSourceLink>> sourceLinkTrackContainer;
+  // sourceLinkTrackContainer.reserve(numTracksUsed);
+  // std::vector<IndexSourceLink> trackSourceLinks;
+  // for (std::size_t itrack = 0; itrack < numTracksUsed; ++itrack) {
+  //   // The list of hits and the initial start parameters
+  //   const auto& protoTrack = protoTracks[itrack];
 
-    // Clear & reserve the right size
-    trackSourceLinks.clear();
-    trackSourceLinks.reserve(protoTrack.size());
+  //   // Clear & reserve the right size
+  //   trackSourceLinks.clear();
+  //   trackSourceLinks.reserve(protoTrack.size());
 
-    // Fill the source links via their indices from the container
-    for (auto hitIndex : protoTrack) {
-      auto sourceLink = sourceLinks.nth(hitIndex);
-      if (sourceLink == sourceLinks.end()) {
-        ACTS_FATAL("Proto track " << itrack << " contains invalid hit index"
-                                  << hitIndex);
-        return ProcessCode::ABORT;
-      }
-      trackSourceLinks.push_back(*sourceLink);
-    }
-    sourceLinkTrackContainer.push_back(trackSourceLinks);
-  }
+  //   // Fill the source links via their indices from the container
+  //   for (auto hitIndex : protoTrack) {
+  //     auto sourceLink = sourceLinks.nth(hitIndex);
+  //     if (sourceLink == sourceLinks.end()) {
+  //       ACTS_FATAL("Proto track " << itrack << " contains invalid hit index"
+  //                                 << hitIndex);
+  //       return ProcessCode::ABORT;
+  //     }
+  //     trackSourceLinks.push_back(*sourceLink);
+  //   }
+  //   sourceLinkTrackContainer.push_back(trackSourceLinks);
+  // }
 
-  // Prepare the output for alignment parameters
-  AlignmentParameters alignedParameters;
+  // // Prepare the output for alignment parameters
+  // AlignmentParameters alignedParameters;
 
-  // Construct a perigee surface as the target surface for the fitter
-  auto pSurface = Acts::Surface::makeShared<Acts::PerigeeSurface>(
-      Acts::Vector3{0., 0., 0.});
+  // // Construct a perigee surface as the target surface for the fitter
+  // auto pSurface = Acts::Surface::makeShared<Acts::PerigeeSurface>(
+  //     Acts::Vector3{0., 0., 0.});
 
-  Acts::KalmanFitterExtensions<Acts::VectorMultiTrajectory> extensions;
-  PassThroughCalibrator pcalibrator;
-  MeasurementCalibratorAdapter calibrator(pcalibrator, measurements);
-  extensions.calibrator.connect<&MeasurementCalibratorAdapter::calibrate>(
-      &calibrator);
-  Acts::GainMatrixUpdater kfUpdater;
-  Acts::GainMatrixSmoother kfSmoother;
-  extensions.updater.connect<
-      &Acts::GainMatrixUpdater::operator()<Acts::VectorMultiTrajectory>>(
-      &kfUpdater);
-  extensions.smoother.connect<
-      &Acts::GainMatrixSmoother::operator()<Acts::VectorMultiTrajectory>>(
-      &kfSmoother);
+  // Acts::KalmanFitterExtensions<Acts::VectorMultiTrajectory> extensions;
+  // PassThroughCalibrator pcalibrator;
+  // MeasurementCalibratorAdapter calibrator(pcalibrator, measurements);
+  // extensions.calibrator.connect<&MeasurementCalibratorAdapter::calibrate>(
+  //     &calibrator);
+  // Acts::GainMatrixUpdater kfUpdater;
+  // Acts::GainMatrixSmoother kfSmoother;
+  // extensions.updater.connect<
+  //     &Acts::GainMatrixUpdater::operator()<Acts::VectorMultiTrajectory>>(
+  //     &kfUpdater);
+  // extensions.smoother.connect<
+  //     &Acts::GainMatrixSmoother::operator()<Acts::VectorMultiTrajectory>>(
+  //     &kfSmoother);
 
-  // Set the KalmanFitter options
-  TrackFitterOptions kfOptions(
-      ctx.geoContext, ctx.magFieldContext, ctx.calibContext, extensions,
-      Acts::PropagatorPlainOptions(ctx.geoContext, ctx.magFieldContext),
-      &(*pSurface));
+  // // Set the KalmanFitter options
+  // TrackFitterOptions kfOptions(
+  //     ctx.geoContext, ctx.magFieldContext, ctx.calibContext, extensions,
+  //     Acts::PropagatorPlainOptions(ctx.geoContext, ctx.magFieldContext),
+  //     &(*pSurface));
 
-  // Set the alignment options
-  ActsAlignment::AlignmentOptions<TrackFitterOptions> alignOptions(
-      kfOptions, m_cfg.alignedTransformUpdater, m_cfg.alignedDetElements,
-      m_cfg.chi2ONdfCutOff, m_cfg.deltaChi2ONdfCutOff, m_cfg.maxNumIterations);
+  // // Set the alignment options
+  // ActsAlignment::AlignmentOptions<TrackFitterOptions> alignOptions(
+  //     kfOptions, m_cfg.alignedTransformUpdater, m_cfg.alignedDetElements,
+  //     m_cfg.chi2ONdfCutOff, m_cfg.deltaChi2ONdfCutOff,
+  //     m_cfg.maxNumIterations);
 
-  ACTS_DEBUG("Invoke track-based alignment with " << numTracksUsed
-                                                  << " input tracks");
-  auto result =
-      (*m_cfg.align)(sourceLinkTrackContainer, initialParameters, alignOptions);
-  if (result.ok()) {
-    const auto& alignOutput = result.value();
-    alignedParameters = alignOutput.alignedParameters;
-    ACTS_VERBOSE(
-        "Alignment finished with deltaChi2 = " << result.value().deltaChi2);
-  } else {
-    ACTS_WARNING("Alignment failed with " << result.error());
-  }
+  // ACTS_DEBUG("Invoke track-based alignment with " << numTracksUsed
+  //                                                 << " input tracks");
+  // auto result =
+  //     (*m_cfg.align)(sourceLinkTrackContainer, initialParameters,
+  //     alignOptions);
+  // if (result.ok()) {
+  //   const auto& alignOutput = result.value();
+  //   alignedParameters = alignOutput.alignedParameters;
+  //   ACTS_VERBOSE(
+  //       "Alignment finished with deltaChi2 = " << result.value().deltaChi2);
+  // } else {
+  //   ACTS_WARNING("Alignment failed with " << result.error());
+  // }
 
-  // add alignment parameters to event store
-  m_outputAlignmentParameters(ctx, std::move(alignedParameters));
+  // // add alignment parameters to event store
+  // m_outputAlignmentParameters(ctx, std::move(alignedParameters));
   return ActsExamples::ProcessCode::SUCCESS;
 }

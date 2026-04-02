@@ -99,7 +99,7 @@ class AlignmentAlgorithm final : public IAlgorithm {
     /// Type erased fitter function.
     std::shared_ptr<AlignmentFunction> align;
     /// The aligned transform updater
-    ActsAlignment::AlignedTransformUpdater alignedTransformUpdater;
+    ActsAlignment::AlignmentTransformUpdater alignedTransformUpdater;
     /// The surfaces (with detector elements) to be aligned
     std::vector<Acts::DetectorElementBase*> alignedDetElements;
     /// The alignment mask at each iteration

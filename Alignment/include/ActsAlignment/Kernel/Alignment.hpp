@@ -9,36 +9,58 @@
 #pragma once
 
 #include "Acts/Definitions/Algebra.hpp"
-#include "Acts/Definitions/Alignment.hpp"
-#include "Acts/Definitions/TrackParametrization.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
-#include "Acts/MagneticField/MagneticFieldContext.hpp"
 #include "Acts/Surfaces/Surface.hpp"
-#include "Acts/TrackFitting/KalmanFitter.hpp"
-#include "Acts/TrackFitting/detail/KalmanGlobalCovariance.hpp"
-#include "Acts/Utilities/CalibrationContext.hpp"
 #include "Acts/Utilities/Logger.hpp"
 #include "Acts/Utilities/Result.hpp"
-#include "ActsAlignment/Kernel/AlignmentError.hpp"
 #include "ActsAlignment/Kernel/AlignmentMask.hpp"
 #include "ActsAlignment/Kernel/detail/AlignmentEngine.hpp"
 
 #include <limits>
-#include <map>
-#include <queue>
+#include <unordered_map>
 #include <vector>
+
 namespace ActsAlignment {
-using AlignedTransformUpdater =
+
+/// @brief Alignment transform updater
+using AlignmentTransformUpdater =
     std::function<bool(Acts::DetectorElementBase*, const Acts::GeometryContext&,
                        const Acts::Vector3&, const Acts::Vector3&)>;
 
-enum struct AlignmentMode : int { local = 0, global = 1 };
+/// @brief Alignment result struct
+struct AlignmentResult {
+  // The change of alignment parameters
+  Acts::ActsDynamicVector deltaAlignmentParameters;
+  // The aligned parameters for detector elements
+  std::unordered_map<Acts::DetectorElementBase*, Acts::Transform3>
+      alignedParameters;
+  // The covariance of alignment parameters
+  Acts::ActsDynamicMatrix alignmentCovariance;
+  // The average chi2/ndf (ndf is the measurement dim)
+  double averageChi2ONdf = std::numeric_limits<double>::max();
+  // The delta chi2
+  double deltaChi2 = std::numeric_limits<double>::max();
+  // The chi2
+  double chi2 = 0;
+  // The measurement dimension from all tracks
+  std::size_t measurementDim = 0;
+  // The alignment degree of freedom
+  std::size_t alignmentDof = 0;
+  // The number of tracks used for alignment
+  std::size_t numTracks = 0;
+  // The indexed alignable surfaces
+  std::unordered_map<const Acts::Surface*, std::size_t> idxedAlignSurfaces;
+};
 
-///
+/// @brief Alignment parameters solver
+using AlignmentParametersSolver = Acts::Delegate<void(
+    const Acts::GeometryContext& gctx, AlignmentResult& alignRes,
+    const Acts::ActsDynamicVector& sumChi2Derivative,
+    const Acts::ActsDynamicMatrix& sumChi2SecondDerivative)>;
+
 /// @brief Options for align() call
 ///
 /// @tparam fit_options_t The fit options type
-///
 template <typename fit_options_t>
 struct AlignmentOptions {
   /// Deleted default constructor
@@ -46,91 +68,46 @@ struct AlignmentOptions {
 
   /// AlignmentOptions
   ///
-  /// @param fOptions The fit options
-  /// @param aTransformUpdater The updater to update aligned transform
-  /// @param aDetElements The alignable detector elements
-  /// @param chi2CufOff The alignment chi2 tolerance
-  /// @param deltaChi2CutOff The change of chi2 within a few iterations
-  /// @param maxIters The alignment maximum iterations
-
-  AlignmentOptions(
-      const fit_options_t& fOptions,
-      const AlignedTransformUpdater& aTransformUpdater,
-      const std::vector<Acts::DetectorElementBase*>& aDetElements = {},
-      double chi2CutOff = 0.5,
-      const std::pair<std::size_t, double>& deltaChi2CutOff = {5, 0.01},
-      std::size_t maxIters = 5, AlignmentMask mask = AlignmentMask::All,
-      AlignmentMode mode = AlignmentMode::local)
+  /// @param fOptions KF fit options
+  /// @param aTransformUpdater updater for the alignment transform
+  /// @param aParametersSolver solver for the alignment parameters delta
+  /// @param aDetElements alignable detector elements
+  /// @param chi2CufOff chi2 alignment convergence tolerance
+  /// @param deltaChi2CutOff convergence threshold of chi2/ndf/nIt
+  /// @param maxIters maximum number of iteration of the alignment fit
+  AlignmentOptions(const fit_options_t& fOptions,
+                   const AlignmentTransformUpdater& aTransformUpdater,
+                   const AlignmentParametersSolver& aParametersSolver,
+                   const std::vector<Acts::DetectorElementBase*>& aDetElements,
+                   double chi2CutOff,
+                   const std::pair<std::size_t, double>& deltaChi2CutOff,
+                   std::size_t maxIters, AlignmentMask mask)
       : fitOptions(fOptions),
-        alignedTransformUpdater(aTransformUpdater),
+        alignmentTransformUpdater(aTransformUpdater),
+        alignmentParametersSolver(aParametersSolver),
         alignedDetElements(aDetElements),
         averageChi2ONdfCutOff(chi2CutOff),
         deltaAverageChi2ONdfCutOff(deltaChi2CutOff),
         maxIterations(maxIters),
-        alignmentMask(mask),
-        alignmentMode(mode) {}
+        alignmentMask(mask) {}
 
-  // The fit options
+  /// Fit options
   fit_options_t fitOptions;
-
-  /// The updater to the aligned transform
-  AlignedTransformUpdater alignedTransformUpdater = nullptr;
-
-  // The detector elements to be aligned
+  /// Alignment transform updater
+  AlignmentTransformUpdater alignmentTransformUpdater;
+  /// Alignment parameters solver
+  AlignmentParametersSolver alignmentParametersSolver;
+  /// The detector elements to be aligned
   std::vector<Acts::DetectorElementBase*> alignedDetElements;
-
-  // The alignment tolerance to determine if the alignment is covered
-  double averageChi2ONdfCutOff = 0.5;
-
-  // The delta of average chi2/ndf within a couple of iterations to determine if
-  // alignment is converged
-  std::pair<std::size_t, double> deltaAverageChi2ONdfCutOff = {5, 0.01};
-
-  // The maximum number of iterations to run alignment
-  std::size_t maxIterations = 5;
-
-  // The alignment mask
+  /// The alignment tolerance to determine if the alignment is covered
+  double averageChi2ONdfCutOff;
+  /// The therhold of average chi2/ndf delta within a number of iterations to
+  /// determine if alignment is converged
+  std::pair<std::size_t, double> deltaAverageChi2ONdfCutOff;
+  /// The maximum number of iterations to run alignment
+  std::size_t maxIterations;
+  /// The alignment mask
   AlignmentMask alignmentMask;
-
-  // The alignment mode
-  ActsAlignment::AlignmentMode alignmentMode;
-};
-
-/// @brief Alignment result struct
-///
-struct AlignmentResult {
-  // The change of alignment parameters
-  Acts::ActsDynamicVector deltaAlignmentParameters;
-
-  // The aligned parameters for detector elements
-  std::unordered_map<Acts::DetectorElementBase*, Acts::Transform3>
-      alignedParameters;
-
-  // The covariance of alignment parameters
-  Acts::ActsDynamicMatrix alignmentCovariance;
-
-  // The average chi2/ndf (ndf is the measurement dim)
-  double averageChi2ONdf = std::numeric_limits<double>::max();
-
-  // The delta chi2
-  double deltaChi2 = std::numeric_limits<double>::max();
-
-  // The chi2
-  double chi2 = 0;
-
-  // The measurement dimension from all tracks
-  std::size_t measurementDim = 0;
-
-  // The alignment degree of freedom
-  std::size_t alignmentDof = 0;
-
-  // The number of tracks used for alignment
-  std::size_t numTracks = 0;
-
-  // The indexed alignable surfaces
-  std::unordered_map<const Acts::Surface*, std::size_t> idxedAlignSurfaces;
-
-  Acts::Result<void> result{Acts::Result<void>::success()};
 };
 
 /// @brief KalmanFitter-based alignment implementation
@@ -138,8 +115,6 @@ struct AlignmentResult {
 /// @tparam fitter_t Type of the fitter class
 template <typename fitter_t>
 struct Alignment {
-  // @TODO: Redefine in terms of Track object
-
   /// Default constructor is deleted
   Alignment() = delete;
 
@@ -195,8 +170,9 @@ struct Alignment {
       const trajectory_container_t& trajectoryCollection,
       const start_parameters_container_t& startParametersCollection,
       const fit_options_t& fitOptions, AlignmentResult& alignResult,
-      const AlignmentMask& alignMask = AlignmentMask::All,
-      const AlignmentMode& alignMode = AlignmentMode::local) const;
+      const AlignmentMask& alignMask,
+      const ActsAlignment::AlignmentParametersSolver& alignmentParametersSolver)
+      const;
 
   /// @brief update the detector element alignment parameters
   ///
@@ -207,7 +183,7 @@ struct Alignment {
   Acts::Result<void> updateAlignmentParameters(
       const Acts::GeometryContext& gctx,
       const std::vector<Acts::DetectorElementBase*>& alignedDetElements,
-      const AlignedTransformUpdater& alignedTransformUpdater,
+      const AlignmentTransformUpdater& alignedTransformUpdater,
       AlignmentResult& alignResult) const;
 
   /// @brief Alignment implementation
