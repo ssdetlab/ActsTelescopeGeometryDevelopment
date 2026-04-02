@@ -11,6 +11,7 @@
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
 #include "Acts/Surfaces/Surface.hpp"
+#include "Acts/Utilities/Delegate.hpp"
 #include "Acts/Utilities/Logger.hpp"
 #include "Acts/Utilities/Result.hpp"
 #include "ActsAlignment/Kernel/AlignmentMask.hpp"
@@ -23,9 +24,9 @@
 namespace ActsAlignment {
 
 /// @brief Alignment transform updater
-using AlignmentTransformUpdater =
-    std::function<bool(Acts::DetectorElementBase*, const Acts::GeometryContext&,
-                       const Acts::Vector3&, const Acts::Vector3&)>;
+using AlignmentTransformUpdater = Acts::Delegate<bool(
+    Acts::DetectorElementBase*, const Acts::GeometryContext&,
+    const Acts::Vector3&, const Acts::Vector3&)>;
 
 /// @brief Alignment result struct
 struct AlignmentResult {
