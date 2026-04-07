@@ -40,7 +40,7 @@ struct AlignmentFunctionImpl
       const ActsAlignment::AlignmentOptions<
           ActsExamples::AlignmentAlgorithm::TrackFitterOptions>& options)
       const override {
-    return align.align(sourceLinks, initialParameters, options);
+    // return align.align(sourceLinks, initialParameters, options);
   };
 };
 }  // namespace

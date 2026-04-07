@@ -20,25 +20,22 @@
 #include <queue>
 
 template <typename fitter_t>
-template <typename source_link_t, typename start_parameters_t,
+template <typename source_link_container_t, typename start_parameters_t,
           typename fit_options_t>
 Acts::Result<ActsAlignment::detail::TrackAlignmentState>
 ActsAlignment::Alignment<fitter_t>::evaluateTrackAlignmentState(
     const Acts::GeometryContext& gctx,
-    const std::vector<source_link_t>& sourcelinks,
+    const source_link_container_t& sourceLinks,
     const start_parameters_t& sParameters, const fit_options_t& fitOptions,
     const std::unordered_map<const Acts::Surface*, std::size_t>&
         idxedAlignSurfaces,
-    const ActsAlignment::AlignmentMask& alignMask) const {
+    const AlignmentMask& alignMask) const {
   Acts::TrackContainer tracks{Acts::VectorTrackContainer{},
                               Acts::VectorMultiTrajectory{}};
 
-  // Convert to Acts::SourceLink during iteration
-  Acts::SourceLinkAdapterIterator begin{sourcelinks.begin()};
-  Acts::SourceLinkAdapterIterator end{sourcelinks.end()};
-
   // Perform the fit
-  auto fitRes = m_fitter.fit(begin, end, sParameters, fitOptions, tracks);
+  auto fitRes = m_fitter.fit(sourceLinks.begin(), sourceLinks.end(),
+                             sParameters, fitOptions, tracks);
 
   if (!fitRes.ok()) {
     ACTS_WARNING("Fit failure");

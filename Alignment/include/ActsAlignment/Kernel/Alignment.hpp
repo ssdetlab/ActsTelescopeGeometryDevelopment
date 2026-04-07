@@ -141,11 +141,11 @@ struct Alignment {
   /// moment)
   ///
   /// @result The alignment state for a single track
-  template <typename source_link_t, typename start_parameters_t,
+  template <typename source_link_container_t, typename start_parameters_t,
             typename fit_options_t>
   Acts::Result<detail::TrackAlignmentState> evaluateTrackAlignmentState(
       const Acts::GeometryContext& gctx,
-      const std::vector<source_link_t>& sourcelinks,
+      const source_link_container_t& sourceLinks,
       const start_parameters_t& sParameters, const fit_options_t& fitOptions,
       const std::unordered_map<const Acts::Surface*, std::size_t>&
           idxedAlignSurfaces,
