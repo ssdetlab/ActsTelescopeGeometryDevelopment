@@ -182,7 +182,7 @@ class Geant4MaterialRecording final : public Geant4SimulationBase {
     std::string outputMaterialTracks = "material_tracks";
 
     /// Materials to exclude from the recording.
-    std::vector<std::string> excludeMaterials = {"Air", "Vacuum"};
+    std::vector<std::string> excludeMaterials = {"Vacuum"};
   };
 
   /// Material recording constructor

@@ -48,8 +48,8 @@ def runMaterialRecording(
     # )
     # weightNoWindow = 346.1 - 173.56
     vertexWindow=UniformVertexGenerator(
-        mins=acts.Vector4(-6.3, 78.7, 16630, 0),
-        maxs=acts.Vector4(7.5, 108.8, 16630, 0),
+        mins=acts.Vector4(-8, 75, 16530, 0),
+        maxs=acts.Vector4(8, 110, 16530, 0),
     )
     #vertexWindow=UniformVertexGenerator(
     #    mins=acts.Vector4(-20, 30, 16630, 0),
@@ -104,7 +104,7 @@ def runMaterialRecording(
             prePostStep=True,
             recalculateTotals=True,
             inputMaterialTracks="material-tracks",
-            filePath=os.path.join(outputDir, "geant4_material_tracks_validation.root"),
+            filePath=os.path.join(outputDir, "geant4_material_tracks_recording.root"),
             level=acts.logging.INFO,
         )
     )
