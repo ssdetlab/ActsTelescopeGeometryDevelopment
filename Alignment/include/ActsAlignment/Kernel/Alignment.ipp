@@ -241,6 +241,12 @@ ActsAlignment::Alignment<fitter_t>::align(
       return updateRes.error();
     }
   }
+  // Write out the result
+  for (const auto& det : alignOptions.alignedDetElements) {
+    const auto& surface = &det->surface();
+    const auto& transform = det->transform(alignOptions.fitOptions.geoContext);
+    alignResult.alignedParameters.emplace(det, transform);
+  }
 
   // Alignment failure if not converged
   if (!converged) {
