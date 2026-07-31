@@ -41,21 +41,16 @@ struct GenericScattering {
   std::array<Particle, 0> operator()(generator_t &generator,
                                      const Acts::MaterialSlab &slab,
                                      Particle &particle) const {
-    // the scattered direction can be computed by rotating the initial
-    // direction around a vector orthogonal to the initial direction, i.e. the
-    // scattering deflector, by the scattering angle. there are an infinite
-    // number of vectors orthogonal to the initial direction. the deflector is
-    // rotated by some angle relative to some fixpoint.
-    //
-    // thus two random angles are required: the random deflector orientation
-    // angle drawn uniformly from the [-pi,pi) range and the scattering angle
-    // drawn from the specific scattering model distribution.
+    // Get the scattering angle
+    const auto theta0 = Acts::computeMultipleScatteringTheta0(
+        slab, particle.absolutePdg(), particle.mass(), particle.qOverP(),
+        particle.absoluteCharge());
 
-    // draw the random orientation angle
-    const auto psi =
-        std::uniform_real_distribution<double>(-M_PI, M_PI)(generator);
-    // draw the scattering angle
-    const auto theta = angle(generator, slab, particle);
+    // Draw to independent plane-projected normal angles
+    double dx = std::normal_distribution<double>(0, 1)(generator) * theta0;
+    double dy = std::normal_distribution<double>(0, 1)(generator) * theta0;
+    double theta = std::hypot(dx, dy);
+    double psi = atan2(dy, dx);
 
     Acts::Vector3 direction = particle.direction();
     // construct the combined rotation to the scattered direction
