@@ -10,6 +10,7 @@
 #include "Acts/Definitions/Alignment.hpp"
 #include "Acts/EventData/VectorMultiTrajectory.hpp"
 #include "Acts/EventData/VectorTrackContainer.hpp"
+#include "Acts/MagneticField/MagneticFieldContext.hpp"
 #include "Acts/TrackFitting/detail/KalmanGlobalCovariance.hpp"
 #include "Acts/Utilities/Logger.hpp"
 #include "ActsAlignment/Kernel/Alignment.hpp"
@@ -17,6 +18,7 @@
 #include "ActsAlignment/Kernel/AlignmentMask.hpp"
 
 #include <cstddef>
+#include <functional>
 #include <queue>
 
 template <typename fitter_t>
@@ -60,11 +62,13 @@ ActsAlignment::Alignment<fitter_t>::evaluateTrackAlignmentState(
 
 template <typename fitter_t>
 template <typename trajectory_container_t,
-          typename start_parameters_container_t, typename fit_options_t>
+          typename start_parameters_container_t,
+          typename mag_field_parameters_container_t, typename fit_options_t>
 void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
     const Acts::GeometryContext& gctx,
     const trajectory_container_t& trajectoryCollection,
     const start_parameters_container_t& startParametersCollection,
+    const mag_field_parameters_container_t& mFieldParametersCollection,
     const fit_options_t& fitOptions, AlignmentResult& alignResult,
     const AlignmentMask& alignMask,
     const ActsAlignment::AlignmentParametersSolver& alignmentParametersSolver)
@@ -83,7 +87,7 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
       Acts::ActsDynamicMatrix::Zero(alignResult.alignmentDof,
                                     alignResult.alignmentDof);
   // Copy the fit options
-  fit_options_t fitOptionsWithRefSurface = fitOptions;
+  fit_options_t fitOptionsWithMagFieldPars = fitOptions;
   // Calculate contribution to chi2 derivatives from all input trajectories
   alignResult.chi2 = 0;
   alignResult.measurementDim = 0;
@@ -92,9 +96,15 @@ void ActsAlignment::Alignment<fitter_t>::calculateAlignmentParameters(
   for (unsigned int iTraj = 0; iTraj < trajectoryCollection.size(); iTraj++) {
     const auto& sourcelinks = trajectoryCollection.at(iTraj);
     const auto& sParameters = startParametersCollection.at(iTraj);
+    const auto& mParameters = mFieldParametersCollection.at(iTraj);
+
+    Acts::MagneticFieldContext trajMctx{mParameters};
+    fitOptionsWithMagFieldPars.magFieldContext =
+        std::reference_wrapper<const Acts::MagneticFieldContext>(trajMctx);
+
     auto evaluateRes = evaluateTrackAlignmentState(
         fitOptions.geoContext, sourcelinks, sParameters,
-        fitOptionsWithRefSurface, alignResult.idxedAlignSurfaces, alignMask);
+        fitOptionsWithMagFieldPars, alignResult.idxedAlignSurfaces, alignMask);
     if (!evaluateRes.ok()) {
       ACTS_DEBUG("Evaluation of alignment state for track " << iTraj
                                                             << " failed");
@@ -166,11 +176,13 @@ ActsAlignment::Alignment<fitter_t>::updateAlignmentParameters(
 
 template <typename fitter_t>
 template <typename trajectory_container_t,
-          typename start_parameters_container_t, typename fit_options_t>
+          typename start_parameters_container_t,
+          typename mag_field_parameters_container_t, typename fit_options_t>
 Acts::Result<ActsAlignment::AlignmentResult>
 ActsAlignment::Alignment<fitter_t>::align(
     const trajectory_container_t& trajectoryCollection,
     const start_parameters_container_t& startParametersCollection,
+    const mag_field_parameters_container_t& mFieldParametersCollection,
     const ActsAlignment::AlignmentOptions<fit_options_t>& alignOptions) const {
   // Construct an AlignmentResult object
   AlignmentResult alignResult;
@@ -195,8 +207,9 @@ ActsAlignment::Alignment<fitter_t>::align(
     // Calculate the alignment parameters delta etc.
     calculateAlignmentParameters(
         alignOptions.fitOptions.geoContext, trajectoryCollection,
-        startParametersCollection, alignOptions.fitOptions, alignResult,
-        alignOptions.alignmentMask, alignOptions.alignmentParametersSolver);
+        startParametersCollection, mFieldParametersCollection,
+        alignOptions.fitOptions, alignResult, alignOptions.alignmentMask,
+        alignOptions.alignmentParametersSolver);
     // Screen out the information
     ACTS_INFO("iIter = " << iIter << ", total chi2 = " << alignResult.chi2
                          << ", total measurementDim = "

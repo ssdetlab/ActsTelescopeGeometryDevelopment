@@ -17,6 +17,7 @@
 #include "ActsAlignment/Kernel/AlignmentMask.hpp"
 #include "ActsAlignment/Kernel/detail/AlignmentEngine.hpp"
 
+#include <cstddef>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -39,6 +40,11 @@ struct AlignmentResult {
   Acts::ActsDynamicMatrix alignmentCovariance;
   // The average chi2/ndf (ndf is the measurement dim)
   double averageChi2ONdf = std::numeric_limits<double>::max();
+
+  // The average chi2/ndf (ndf is the measurement dim)
+  double prevAverageChi2ONdf = std::numeric_limits<double>::max();
+  std::size_t count;
+
   // The delta chi2
   double deltaChi2 = std::numeric_limits<double>::max();
   // The chi2
@@ -165,11 +171,13 @@ struct Alignment {
   /// @param alignResult [in, out] The aligned result
   /// @param alignMask The alignment mask (same for all measurements now)
   template <typename trajectory_container_t,
-            typename start_parameters_container_t, typename fit_options_t>
+            typename start_parameters_container_t,
+            typename mag_field_parameters_container_t, typename fit_options_t>
   void calculateAlignmentParameters(
       const Acts::GeometryContext& gctx,
       const trajectory_container_t& trajectoryCollection,
       const start_parameters_container_t& startParametersCollection,
+      const mag_field_parameters_container_t& mFieldParametersCollection,
       const fit_options_t& fitOptions, AlignmentResult& alignResult,
       const AlignmentMask& alignMask,
       const ActsAlignment::AlignmentParametersSolver& alignmentParametersSolver)
@@ -201,11 +209,13 @@ struct Alignment {
   ///
   /// @result The alignment result
   template <typename trajectory_container_t,
-            typename start_parameters_container_t, typename fit_options_t>
+            typename start_parameters_container_t,
+            typename mag_field_parameters_container_t, typename fit_options_t>
   Acts::Result<AlignmentResult> align(
       const trajectory_container_t& trajectoryCollection,
       const start_parameters_container_t& startParametersCollection,
-      const AlignmentOptions<fit_options_t>& alignOptions) const;
+      const mag_field_parameters_container_t& mFieldParametersCollection,
+      const ActsAlignment::AlignmentOptions<fit_options_t>& alignOptions) const;
 
  private:
   // The fitter
