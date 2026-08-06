@@ -31,31 +31,26 @@ using AlignmentTransformUpdater = Acts::Delegate<bool(
 
 /// @brief Alignment result struct
 struct AlignmentResult {
-  // The change of alignment parameters
+  /// The change of alignment parameters
   Acts::ActsDynamicVector deltaAlignmentParameters;
-  // The aligned parameters for detector elements
+  /// The aligned parameters for detector elements
   std::unordered_map<Acts::DetectorElementBase*, Acts::Transform3>
       alignedParameters;
-  // The covariance of alignment parameters
+  /// The covariance of alignment parameters
   Acts::ActsDynamicMatrix alignmentCovariance;
-  // The average chi2/ndf (ndf is the measurement dim)
+  /// The average chi2/ndf (ndf is the measurement dim)
   double averageChi2ONdf = std::numeric_limits<double>::max();
-
-  // The average chi2/ndf (ndf is the measurement dim)
-  double prevAverageChi2ONdf = std::numeric_limits<double>::max();
-  std::size_t count;
-
-  // The delta chi2
+  /// The delta chi2
   double deltaChi2 = std::numeric_limits<double>::max();
-  // The chi2
+  /// The chi2
   double chi2 = 0;
-  // The measurement dimension from all tracks
+  /// The measurement dimension from all tracks
   std::size_t measurementDim = 0;
-  // The alignment degree of freedom
+  /// The alignment degree of freedom
   std::size_t alignmentDof = 0;
-  // The number of tracks used for alignment
+  /// The number of tracks used for alignment
   std::size_t numTracks = 0;
-  // The indexed alignable surfaces
+  /// The indexed alignable surfaces
   std::unordered_map<const Acts::Surface*, std::size_t> idxedAlignSurfaces;
 };
 
