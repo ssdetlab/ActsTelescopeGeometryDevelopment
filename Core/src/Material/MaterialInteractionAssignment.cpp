@@ -63,10 +63,6 @@ Acts::MaterialInteractionAssignment::assign(
       ++is;
       cDistance = nDistance;
     }
-    if (cDistance > options.maxDistance) {
-      unassignedMaterialInteractions.push_back(materialInteraction);
-      continue;
-    }
 
     // Settled on the right intersection
     auto [surface, position, direction] = intersectedSurfaces[is];
