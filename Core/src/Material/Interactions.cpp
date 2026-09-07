@@ -13,6 +13,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <iostream>
 
 using namespace Acts::UnitLiterals;
 
@@ -516,9 +517,9 @@ float Acts::computeMultipleScatteringTheta0(const MaterialSlab& slab,
   const float q2OverBeta2 = RelativisticQuantities(m, qOverP, absQ).q2OverBeta2;
 
   // electron or positron
-  if (absPdg == PdgParticle::eElectron) {
-    return theta0RossiGreisen(xOverX0, momentumInv, q2OverBeta2);
-  } else {
-    return theta0Highland(xOverX0, momentumInv, q2OverBeta2);
-  }
+  // if (absPdg == PdgParticle::eElectron) {
+  // return theta0RossiGreisen(xOverX0, momentumInv, q2OverBeta2);
+  // } else {
+  return theta0Highland(xOverX0, momentumInv, q2OverBeta2);
+  // }
 }
