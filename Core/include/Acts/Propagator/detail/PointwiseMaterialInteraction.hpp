@@ -113,7 +113,10 @@ struct PointwiseMaterialInteraction {
     // Retrieve the material properties
     slab = navigator.currentSurface(state.navigation)
                ->surfaceMaterial()
-               ->materialSlab(pos, navDir, updateStage);
+               ->materialSlab(navigator.currentSurface(state.navigation)
+                                  ->globalToLocal(state.geoContext, pos, dir)
+                                  .value(),
+                              navDir, updateStage);
 
     // Correct the material properties for non-zero incidence
     pathCorrection = surface->pathCorrection(state.geoContext, pos, dir);
