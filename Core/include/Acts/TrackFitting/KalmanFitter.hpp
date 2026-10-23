@@ -11,6 +11,7 @@
 // Workaround for building on clang+libstdc++
 #include "Acts/Utilities/detail/ReferenceWrapperAnyCompat.hpp"
 
+#include "Acts/Definitions/Algebra.hpp"
 #include "Acts/EventData/MultiTrajectory.hpp"
 #include "Acts/EventData/MultiTrajectoryHelpers.hpp"
 #include "Acts/EventData/SourceLink.hpp"
@@ -1123,11 +1124,10 @@ class KalmanFitter {
     }
 
     if constexpr (!isDirectNavigator) {
-        for (const auto& [surfaceId, _] : inputMeasurements) {
-            propagatorOptions.navigation.insertMeasurementSurface(surfaceId);
-        }
+      for (const auto& [surfaceId, _] : inputMeasurements) {
+        propagatorOptions.navigation.insertMeasurementSurface(surfaceId);
+      }
     }
-
 
     // Catch the actor and set the measurements
     auto& kalmanActor =
@@ -1214,9 +1214,9 @@ class KalmanFitter {
     propagatorOptions.setPlainOptions(kfOptions.propagatorPlainOptions);
 
     if constexpr (!isDirectNavigator) {
-        for (const auto& [surfaceId, _] : inputMeasurements) {
-            propagatorOptions.navigation.insertMeasurementSurface(surfaceId);
-        }
+      for (const auto& [surfaceId, _] : inputMeasurements) {
+        propagatorOptions.navigation.insertMeasurementSurface(surfaceId);
+      }
     }
 
     // Catch the actor and set the measurements
